@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#3730a3" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#grad)"/>
+  <!-- Wallet / Rupee / Sparkles motif -->
+  <circle cx="96" cy="96" r="44" fill="#ffffff" opacity="0.15" />
+  <path d="M60 76C60 67.1634 67.1634 60 76 60H116C124.837 60 132 67.1634 132 76V116C132 124.837 124.837 132 116 132H76C67.1634 132 60 124.837 60 116V76Z" fill="#ffffff" fill-opacity="0.95" />
+  <path d="M80 82H112M80 96H106M80 110H112" stroke="#4f46e5" stroke-width="7" stroke-linecap="round" />
+  <circle cx="120" cy="96" r="6" fill="#10b981" />
+  <!-- Sparkle -->
+  <path d="M136 50L139 58L147 61L139 64L136 72L133 64L125 61L133 58Z" fill="#facc15" />
+</svg>

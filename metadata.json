@@ -1,0 +1,7 @@
+{
+  "name": "ArthaSmart - AI Personal Finance & Bank Sync",
+  "description": "Aplikasi manajemen keuangan pribadi cerdas dengan antarmuka Bento Grid, input via AI Chat & foto struk belanjaan (OCR), target tabungan, dan dashboard analitik komplit.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
