@@ -34,8 +34,7 @@
     <meta property="og:description" content="Aplikasi asisten keuangan pribadi cerdas bertenaga AI & Cloud Firestore." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary" />
-  </head>
-  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-x-hidden antialiased select-none transition-colors">
+    <!-- Early Theme Initializer -->
     <script>
       (function() {
         try {
@@ -44,15 +43,15 @@
           if (isDark) {
             document.documentElement.classList.add('dark');
             document.documentElement.style.colorScheme = 'dark';
-            if (document.body) document.body.classList.add('dark');
           } else {
             document.documentElement.classList.remove('dark');
             document.documentElement.style.colorScheme = 'light';
-            if (document.body) document.body.classList.remove('dark');
           }
         } catch (e) {}
       })();
     </script>
+  </head>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-x-hidden antialiased select-none transition-colors">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>

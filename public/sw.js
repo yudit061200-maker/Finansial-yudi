@@ -1,21 +1,7 @@
 // Service Worker for ArthaSmart PWA
-const CACHE_NAME = 'arthasmart-cache-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.svg',
-  '/icon-512.svg'
-];
+const CACHE_NAME = 'arthasmart-cache-v2';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch(() => {
-        // Silently skip any missing optional assets
-      });
-    })
-  );
   self.skipWaiting();
 });
 
@@ -35,22 +21,40 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Let Firestore network requests pass through normally
-  if (event.request.url.includes('firestore.googleapis.com') || event.request.url.includes('/api/')) {
+  const url = event.request.url;
+
+  // Let Firestore, API, and development/vite requests pass through directly
+  if (
+    event.request.method !== 'GET' ||
+    url.includes('firestore.googleapis.com') ||
+    url.includes('/api/') ||
+    url.includes('/@') ||
+    url.includes('.vite') ||
+    url.includes('node_modules') ||
+    url.includes('hot-update')
+  ) {
     return;
   }
 
+  // Network-first strategy with cache fallback for navigation and static assets
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return (
-        cachedResponse ||
-        fetch(event.request).catch(() => {
-          // Fallback to cache or offline shell
-          if (event.request.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
-        })
-      );
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          return caches.match('/index.html');
+        }
+        return new Response('Offline', { status: 503, statusText: 'Offline' });
+      })
   );
 });

@@ -160,9 +160,9 @@ export const AiChatInput: React.FC<AiChatInputProps> = ({
         } else if (txType === 'expense') {
           // If transaction has small daily keywords (makan, warung, parkir, kopi), prefer cash/e-wallet
           if (/makan|warung|kopi|jajan|parkir|bensin|rokok|mie/i.test(rawLower)) {
-            if (accType === 'cash' || accType === 'e-wallet') score += 25;
+            if (accType === 'cash' || accType === 'ewallet') score += 25;
           } else {
-            if (accType === 'bank' || accType === 'e-wallet') score += 15;
+            if (accType === 'bank' || accType === 'ewallet') score += 15;
           }
         }
       }
