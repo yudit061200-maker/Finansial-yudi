@@ -79,7 +79,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Debt & Receivable Stats
   const debtStats = useMemo(() => {
     const totalPayable = debts
-      .filter((d) => d.type === 'payable' && d.status !== 'paid')
+      .filter((d) => (d.type === 'payable' || d.type === 'installment' || d.isInstallment) && d.status !== 'paid')
       .reduce((sum, d) => sum + d.remainingAmount, 0);
 
     const totalReceivable = debts
@@ -221,56 +221,61 @@ export const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner & Time Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
-            <Sparkles className="w-5 h-5" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 shadow-xs transition-colors">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-2xl bg-slate-950 dark:bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0 shadow-xs ring-1 ring-slate-800 dark:ring-indigo-500">
+            <Sparkles className="w-5 h-5 text-indigo-400 dark:text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Ringkasan Keuangan Anda</h1>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Pantau cashflow, catat transaksi dengan AI Chat & scan struk, dan kelola target finansial.
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-extrabold text-slate-950 dark:text-white tracking-tight">Ringkasan Keuangan Cerdas</h1>
+              <span className="hidden sm:inline-flex text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-150 dark:border-indigo-800/80 px-2.5 py-0.5 rounded-full">
+                Real-time Sync
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+              Pantau arus kas likuiditas, lacak cicilan barang, dan kelola target masa depan dengan AI.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl self-start sm:self-auto overflow-x-auto max-w-full">
+        <div className="flex items-center gap-1 bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200/70 dark:border-slate-700/70 self-start sm:self-auto overflow-x-auto max-w-full">
           <button
             onClick={() => setTimeRange('this_month')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               timeRange === 'this_month'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Bulan Ini
           </button>
           <button
             onClick={() => setTimeRange('last_30_days')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               timeRange === 'last_30_days'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             30 Hari
           </button>
           <button
             onClick={() => setTimeRange('this_year')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               timeRange === 'this_year'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Tahun Ini
           </button>
           <button
             onClick={() => setTimeRange('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
               timeRange === 'all'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-900 text-slate-950 dark:text-white shadow-xs border border-slate-200/80 dark:border-slate-700'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Semua
@@ -281,79 +286,79 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Hero Stat Bento Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Net Worth Bento */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 p-5.5 shadow-xs flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all hover:shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Kekayaan Bersih</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Kekayaan Bersih</span>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center">
               <Wallet className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-2xl font-bold text-slate-900 tracking-tight">
+            <div className="text-2xl font-black text-slate-950 dark:text-white tracking-tight font-mono tabular-nums">
               {formatRupiah(totalNetWorth)}
             </div>
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-500 font-medium">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>{accounts.length} Akun & Dompet Aktif</span>
+            <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-600 dark:text-slate-400 font-semibold">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-950"></span>
+              <span>{accounts.length} Akun & Dompet Terhubung</span>
             </div>
           </div>
         </div>
 
         {/* Card 2: Income Bento (Emerald Tint) */}
-        <div className="bg-emerald-50/70 rounded-3xl border border-emerald-100 p-5 shadow-sm flex flex-col justify-between">
+        <div className="bg-emerald-50/60 dark:bg-emerald-950/30 rounded-3xl border border-emerald-200/70 dark:border-emerald-800/60 p-5.5 shadow-xs flex flex-col justify-between hover:border-emerald-300 dark:hover:border-emerald-700 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-emerald-700/80 uppercase tracking-widest">Total Pemasukan</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+            <span className="text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300 uppercase tracking-widest">Total Pemasukan</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 flex items-center justify-center">
               <ArrowDownRight className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-2xl font-bold text-emerald-900 tracking-tight">
+            <div className="text-2xl font-black text-emerald-950 dark:text-emerald-200 tracking-tight font-mono tabular-nums">
               {formatRupiah(totalIncome)}
             </div>
-            <div className="flex items-center gap-1 mt-2 text-xs text-emerald-700 font-bold">
+            <div className="flex items-center gap-1 mt-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold">
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>Gaji, Dividen & Freelance</span>
+              <span>Gaji, Usaha & Investasi</span>
             </div>
           </div>
         </div>
 
         {/* Card 3: Expense Bento */}
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between hover:border-slate-300 transition-colors">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 p-5.5 shadow-xs flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-all hover:shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Pengeluaran</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Total Pengeluaran</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <ArrowUpRight className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-2xl font-bold text-rose-600 tracking-tight">
+            <div className="text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tight font-mono tabular-nums">
               {formatRupiah(totalExpense)}
             </div>
-            <div className="flex items-center gap-1 mt-2 text-xs text-slate-500 font-medium">
-              <span>Rata-rata: {formatRupiah(avgDailyExpense)}/hari</span>
+            <div className="flex items-center gap-1 mt-2 text-xs text-slate-500 dark:text-slate-400 font-semibold">
+              <span>Rata-rata: <strong className="text-slate-800 dark:text-slate-200">{formatRupiah(avgDailyExpense)}</strong>/hari</span>
             </div>
           </div>
         </div>
 
-        {/* Card 4: Net Cash Flow & Savings Rate Bento (Indigo Feature Tile) */}
-        <div className="bg-indigo-600 rounded-3xl p-5 text-white shadow-lg shadow-indigo-100 relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+        {/* Card 4: Net Cash Flow & Savings Rate Bento (Dark Slate Signature Tile) */}
+        <div className="bg-slate-950 dark:bg-slate-900 rounded-3xl p-5.5 text-white shadow-md relative overflow-hidden flex flex-col justify-between ring-1 ring-slate-800 dark:ring-slate-700">
+          <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none"></div>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-white/80 uppercase tracking-widest">Arus Kas Bersih</span>
-            <div className="w-8 h-8 rounded-xl bg-white/15 text-white flex items-center justify-center">
-              <PiggyBank className="w-4 h-4" />
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Arus Kas Bersih</span>
+            <div className="w-8 h-8 rounded-xl bg-white/10 text-white flex items-center justify-center">
+              <PiggyBank className="w-4 h-4 text-indigo-300" />
             </div>
           </div>
-          <div className="mt-4">
-            <div className="text-2xl font-bold tracking-tight text-white">
+          <div className="mt-4 relative z-10">
+            <div className="text-2xl font-black tracking-tight text-white font-mono tabular-nums">
               {formatRupiah(netCashflow)}
             </div>
             <div className="flex items-center gap-2 mt-2 text-xs">
-              <span className="font-bold bg-white/20 text-white px-2 py-0.5 rounded-full text-[11px]">
+              <span className="font-extrabold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2 py-0.5 rounded-full text-[11px]">
                 {savingsRate}% Rasio Simpan
               </span>
-              <span className="text-white/80 text-[11px] font-medium">Surplus Sehat</span>
+              <span className="text-slate-400 text-[11px] font-medium">Surplus Bulanan</span>
             </div>
           </div>
         </div>
@@ -363,96 +368,96 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <button
           onClick={() => onNavigate('debts')}
-          className="flex items-center gap-3.5 p-4 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md rounded-2xl transition-all text-left group cursor-pointer"
+          className="flex items-center gap-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-sm rounded-2xl transition-all text-left group cursor-pointer"
         >
-          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <HandCoins className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <HandCoins className="w-4.5 h-4.5" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-slate-800 group-hover:text-purple-600 transition-colors truncate">Hutang & Piutang</div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider truncate">
-              {debtStats.activeCount > 0 ? `${debtStats.activeCount} Catatan Aktif` : 'Catat Pinjaman'}
+            <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-purple-700 dark:group-hover:text-purple-400 transition-colors truncate">Hutang & Kredit</div>
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">
+              {debtStats.activeCount > 0 ? `${debtStats.activeCount} Aktif` : 'Catat Pinjaman'}
             </div>
           </div>
         </button>
 
         <button
           onClick={() => onNavigate('aichat')}
-          className="flex items-center gap-3.5 p-4 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md rounded-2xl transition-all text-left group cursor-pointer"
+          className="flex items-center gap-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm rounded-2xl transition-all text-left group cursor-pointer"
         >
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <BotMessageSquare className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <BotMessageSquare className="w-4.5 h-4.5" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate">Input via Chat AI</div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider truncate">Ketik santai</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors truncate">Input via Chat AI</div>
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">Ketik santai</div>
           </div>
         </button>
 
         <button
           onClick={() => onNavigate('receipt')}
-          className="flex items-center gap-3.5 p-4 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md rounded-2xl transition-all text-left group cursor-pointer"
+          className="flex items-center gap-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm rounded-2xl transition-all text-left group cursor-pointer"
         >
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Camera className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Camera className="w-4.5 h-4.5" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors truncate">Scan Struk Belanja</div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider truncate">OCR AI Otomatis</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors truncate">Scan Struk</div>
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">OCR AI Otomatis</div>
           </div>
         </button>
 
         <button
           onClick={() => onNavigate('budgets')}
-          className="flex items-center gap-3.5 p-4 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md rounded-2xl transition-all text-left group cursor-pointer"
+          className="flex items-center gap-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-sm rounded-2xl transition-all text-left group cursor-pointer"
         >
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Target className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Target className="w-4.5 h-4.5" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-600 transition-colors truncate">Anggaran & Goals</div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider truncate">Kelola Tabungan</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors truncate">Anggaran & Target</div>
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">Kelola Tabungan</div>
           </div>
         </button>
 
         <button
           onClick={onOpenNewTransaction}
-          className="col-span-2 sm:col-span-1 flex items-center gap-3.5 p-4 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md rounded-2xl transition-all text-left group cursor-pointer"
+          className="col-span-2 sm:col-span-1 flex items-center gap-3 p-3.5 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-600 hover:shadow-sm rounded-2xl transition-all text-left group cursor-pointer"
         >
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Plus className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+            <Plus className="w-4.5 h-4.5" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-bold text-slate-800 group-hover:text-amber-600 transition-colors truncate">Manual Input</div>
-            <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider truncate">+ Catat Transaksi</div>
+            <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors truncate">Manual Input</div>
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider truncate">+ Transaksi</div>
           </div>
         </button>
       </div>
 
       {/* Debt & Receivable Quick Highlight Alert if any active / urgent */}
       {(debtStats.totalPayable > 0 || debtStats.totalReceivable > 0) && (
-        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors">
           <div className="flex items-center gap-3.5 w-full sm:w-auto">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
               <HandCoins className="w-6 h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900">Buku Hutang & Piutang</h3>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Buku Hutang & Piutang</h3>
                 {debtStats.urgentCount > 0 && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-amber-600" />
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 rounded-full flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                     {debtStats.urgentCount} Jatuh Tempo Dekat
                   </span>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-3 mt-1 text-xs">
-                <span className="text-slate-600 font-medium">
-                  Hutang Saya: <strong className="text-rose-600">{formatRupiah(debtStats.totalPayable)}</strong>
+                <span className="text-slate-600 dark:text-slate-400 font-medium">
+                  Hutang Saya: <strong className="text-rose-600 dark:text-rose-400">{formatRupiah(debtStats.totalPayable)}</strong>
                 </span>
-                <span className="text-slate-300">•</span>
-                <span className="text-slate-600 font-medium">
-                  Piutang Saya: <strong className="text-emerald-600">{formatRupiah(debtStats.totalReceivable)}</strong>
+                <span className="text-slate-300 dark:text-slate-700">•</span>
+                <span className="text-slate-600 dark:text-slate-400 font-medium">
+                  Piutang Saya: <strong className="text-emerald-600 dark:text-emerald-400">{formatRupiah(debtStats.totalReceivable)}</strong>
                 </span>
               </div>
             </div>
@@ -460,7 +465,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           <button
             onClick={() => onNavigate('debts')}
-            className="w-full sm:w-auto px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            className="w-full sm:w-auto px-4 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
           >
             <span>Buka Buku Catatan</span>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -471,18 +476,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Main Visual Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Cashflow Trend Chart (SVG) Bento Tile */}
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm flex flex-col justify-between transition-colors">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Analisis Arus Kas (14 Hari Terakhir)</h2>
-              <p className="text-xs text-slate-500 font-medium">Perbandingan harian pemasukan vs pengeluaran</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Analisis Arus Kas (14 Hari Terakhir)</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Perbandingan harian pemasukan vs pengeluaran</p>
             </div>
             <div className="flex items-center gap-3 text-xs">
-              <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-full flex items-center gap-1.5">
+              <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                 Pemasukan
               </span>
-              <span className="px-3 py-1 bg-rose-50 text-rose-700 text-[10px] font-bold rounded-full flex items-center gap-1.5">
+              <span className="px-3 py-1 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-bold rounded-full flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
                 Pengeluaran
               </span>
@@ -576,25 +581,25 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           {/* Burn Rate & Runway Footer */}
-          <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs gap-3 text-slate-500 font-medium">
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between text-xs gap-3 text-slate-500 dark:text-slate-400 font-medium">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">🔥 Rata-rata Burn Rate:</span>
-              <span className="text-rose-600 font-bold">{formatRupiah(avgDailyExpense)} / hari</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">🔥 Rata-rata Burn Rate:</span>
+              <span className="text-rose-600 dark:text-rose-400 font-bold">{formatRupiah(avgDailyExpense)} / hari</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">📅 Sisa Hari Bulan Ini:</span>
-              <span className="text-slate-900 font-bold">{remainingDays} hari</span>
-              <span className="text-slate-400">(Estimasi sisa saldo: {formatRupiah(Math.max(0, totalNetWorth - (avgDailyExpense * remainingDays)))})</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">📅 Sisa Hari Bulan Ini:</span>
+              <span className="text-slate-900 dark:text-white font-bold">{remainingDays} hari</span>
+              <span className="text-slate-400 dark:text-slate-500">(Estimasi sisa saldo: {formatRupiah(Math.max(0, totalNetWorth - (avgDailyExpense * remainingDays)))})</span>
             </div>
           </div>
         </div>
 
         {/* Right 1 Col: Category Breakdown Bento Tile */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm flex flex-col justify-between transition-colors">
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-base font-bold text-slate-900">Alokasi Pengeluaran</h2>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Alokasi Pengeluaran</h2>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-full">
                 {categoryExpenses.length} Kategori
               </span>
             </div>
@@ -633,8 +638,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   })}
                 </svg>
                 <div className="absolute flex flex-col items-center justify-center text-center pointer-events-none">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Keluar</span>
-                  <span className="text-xs font-bold text-slate-900">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Total Keluar</span>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
                     {formatRupiahShort(totalExpense)}
                   </span>
                 </div>
@@ -653,8 +658,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   }
                   className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors text-xs ${
                     activeCategoryFilter === cat.category
-                      ? 'bg-indigo-50 border border-indigo-200'
-                      : 'hover:bg-slate-50'
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -662,11 +667,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: getCategoryColor(cat.category) }}
                     ></span>
-                    <span className="text-slate-700 truncate font-semibold">{cat.category}</span>
+                    <span className="text-slate-700 dark:text-slate-300 truncate font-semibold">{cat.category}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-bold text-slate-900">{formatRupiah(cat.amount)}</span>
-                    <span className="text-[11px] text-slate-400 font-bold w-8 text-right">
+                    <span className="font-bold text-slate-900 dark:text-white">{formatRupiah(cat.amount)}</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500 font-bold w-8 text-right">
                       {cat.percentage}%
                     </span>
                   </div>
@@ -677,7 +682,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           <button
             onClick={() => onNavigate('budgets')}
-            className="mt-4 w-full py-2.5 px-3 text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors text-center cursor-pointer"
+            className="mt-4 w-full py-2.5 px-3 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-xl transition-colors text-center cursor-pointer"
           >
             Kelola Anggaran Kategori →
           </button>
@@ -687,17 +692,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Row 3: Account Distribution & Dark AI Health Score Bento */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Accounts & Wallets Balance Breakdown */}
-        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm transition-colors">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Saldo Akun & E-Wallet</h2>
-              <p className="text-xs text-slate-500 font-medium">Total likuiditas yang tersedia di setiap rekening & dompet</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Saldo Akun & E-Wallet</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total likuiditas yang tersedia di setiap rekening & dompet</p>
             </div>
             <div className="flex items-center gap-2">
               {onAddNewAccount && (
                 <button
                   onClick={onAddNewAccount}
-                  className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Tambah Akun</span>
@@ -705,7 +710,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               )}
               <button
                 onClick={() => onNavigate('transactions')}
-                className="text-xs font-bold text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 inline-flex items-center gap-1 cursor-pointer transition-colors"
+                className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-2.5 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 inline-flex items-center gap-1 cursor-pointer transition-colors"
               >
                 <span>Daftar Transaksi</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -714,12 +719,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           {accounts.length === 0 ? (
-            <div className="mt-5 p-8 border-2 border-dashed border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+            <div className="mt-5 p-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center flex flex-col items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-3">
                 <Wallet className="w-6 h-6" />
               </div>
-              <h3 className="text-sm font-bold text-slate-800">Belum Ada Akun Rekening Terdaftar</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Belum Ada Akun Rekening Terdaftar</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
                 Tambahkan rekening bank, dompet digital (GoPay, OVO, DANA), atau uang tunai untuk mulai mencatat saldo.
               </p>
               {onAddNewAccount && (
@@ -741,7 +746,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 return (
                   <div
                     key={acc.id}
-                    className="group relative p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between hover:border-slate-300 hover:shadow-xs transition-all"
+                    className="group relative p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs transition-all"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -752,8 +757,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           {acc.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="truncate">
-                          <div className="text-xs font-bold text-slate-900 truncate">{acc.name}</div>
-                          <div className="text-[10px] text-slate-400 font-medium">{acc.accountNumberMasked}</div>
+                          <div className="text-xs font-bold text-slate-900 dark:text-white truncate">{acc.name}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{acc.accountNumberMasked}</div>
                         </div>
                       </div>
 
@@ -765,7 +770,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 onResetAccountBalance(acc.id);
                               }
                             }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-all cursor-pointer opacity-70 group-hover:opacity-100"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-all cursor-pointer opacity-70 group-hover:opacity-100"
                             title="Reset Saldo ke Rp 0"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
@@ -774,7 +779,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         {onEditAccount && (
                           <button
                             onClick={() => onEditAccount(acc)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-white border border-transparent hover:border-slate-200 transition-all cursor-pointer opacity-70 group-hover:opacity-100"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-slate-700 border border-transparent hover:border-slate-200 dark:hover:border-slate-600 transition-all cursor-pointer opacity-70 group-hover:opacity-100"
                             title="Edit & Kelola Akun"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -784,12 +789,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
 
                     <div className="mt-4 flex items-baseline justify-between">
-                      <div className="text-sm font-bold text-slate-900">{formatRupiah(acc.balance)}</div>
-                      <div className="text-[11px] text-slate-500 font-bold">{percentOfTotal}%</div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">{formatRupiah(acc.balance)}</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">{percentOfTotal}%</div>
                     </div>
 
                     {/* Progress bar */}
-                    <div className="w-full bg-slate-200/70 h-2 rounded-full mt-2.5 overflow-hidden">
+                    <div className="w-full bg-slate-200/70 dark:bg-slate-700/60 h-2 rounded-full mt-2.5 overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all"
                         style={{ width: `${percentOfTotal}%`, backgroundColor: acc.color }}
@@ -803,7 +808,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* AI Financial Health Score (Dark Bento Accent Card) */}
-        <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-lg flex flex-col justify-between relative overflow-hidden">
+        <div className="bg-slate-900 dark:bg-slate-900 border border-slate-800 rounded-3xl p-6 text-white shadow-lg flex flex-col justify-between relative overflow-hidden">
           <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -882,22 +887,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Row 4: Recent Transactions Feed with Bento styling */}
-      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-sm transition-colors">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Recent Activity</h2>
-            <p className="text-xs text-slate-500 font-medium">Catatan transaksi harian terkini</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Recent Activity</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Catatan transaksi harian terkini</p>
           </div>
           <button
             onClick={() => onNavigate('transactions')}
-            className="text-xs font-bold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-1 cursor-pointer"
+            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 inline-flex items-center gap-1 cursor-pointer"
           >
             <span>Lihat Semua Transaksi ({transactions.length})</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="mt-4 divide-y divide-slate-100">
+        <div className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
           {transactions.slice(0, 6).map((tx) => {
             const acc = accounts.find((a) => a.id === tx.accountId);
             const isExpense = tx.type === 'expense';
@@ -907,16 +912,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div
                 key={tx.id}
                 onClick={() => onSelectTransaction?.(tx)}
-                className="py-3.5 flex items-center justify-between hover:bg-slate-50 px-3 rounded-2xl transition-colors cursor-pointer"
+                className="py-3.5 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 px-3 rounded-2xl transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div
                     className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 font-bold text-sm ${
                       isExpense
-                        ? 'bg-rose-50 text-rose-600'
+                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
                         : isIncome
-                        ? 'bg-emerald-50 text-emerald-600'
-                        : 'bg-indigo-50 text-indigo-600'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
                     }`}
                   >
                     {isExpense ? (
@@ -928,20 +933,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     )}
                   </div>
                   <div className="truncate">
-                    <div className="text-xs font-bold text-slate-900 truncate">{tx.title}</div>
-                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 font-medium">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate">{tx.title}</div>
+                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                       <span>{formatDateIndo(tx.date)}</span>
                       <span>•</span>
-                      <span className="text-slate-700 font-semibold">{tx.category}</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-semibold">{tx.category}</span>
                       <span>•</span>
                       <span className="truncate">{acc?.name || 'Rekening'}</span>
                       {tx.source === 'ai_chat' && (
-                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-bold px-2 py-0.2 rounded-full">
+                        <span className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800 text-[10px] font-bold px-2 py-0.2 rounded-full">
                           AI Chat
                         </span>
                       )}
                       {tx.source === 'receipt_scan' && (
-                        <span className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-bold px-2 py-0.2 rounded-full">
+                        <span className="bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800 text-[10px] font-bold px-2 py-0.2 rounded-full">
                           Scan Struk
                         </span>
                       )}
@@ -953,10 +958,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div
                     className={`text-xs font-bold ${
                       isExpense
-                        ? 'text-rose-600'
+                        ? 'text-rose-600 dark:text-rose-400'
                         : isIncome
-                        ? 'text-emerald-600'
-                        : 'text-slate-900'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-slate-900 dark:text-white'
                     }`}
                   >
                     {isExpense ? '-' : isIncome ? '+' : ''}

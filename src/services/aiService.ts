@@ -71,14 +71,58 @@ export const aiService = {
         amount = Math.round(val);
       }
 
-      // Guess Account
+      const userAccounts: Array<{ id: string; name: string; type: string; provider: string }> =
+        financialContext?.availableAccounts || [];
+
+      // Helper to match user's actual accounts
       let accountName = 'Dompet Tunai (Cash)';
-      if (/bca/i.test(lower)) accountName = 'BCA Tahapan';
-      else if (/mandiri/i.test(lower)) accountName = 'Mandiri Tabungan Livin';
-      else if (/gopay/i.test(lower)) accountName = 'GoPay Saldo Utama';
-      else if (/ovo/i.test(lower)) accountName = 'OVO Premier';
-      else if (/shopee/i.test(lower)) accountName = 'ShopeePay Plus';
-      else if (/bibit/i.test(lower)) accountName = 'Bibit Portofolio Investasi';
+      let destAccountName: string | undefined = undefined;
+
+      if (userAccounts.length > 0) {
+        const found = userAccounts.find((a) => {
+          const aName = a.name.toLowerCase();
+          const aProv = (a.provider || '').toLowerCase();
+          if (lower.includes('bca') && (aProv.includes('bca') || aName.includes('bca'))) return true;
+          if (lower.includes('mandiri') && (aProv.includes('mandiri') || aName.includes('mandiri'))) return true;
+          if (lower.includes('bri') && (aProv.includes('bri') || aName.includes('bri'))) return true;
+          if (lower.includes('bni') && (aProv.includes('bni') || aName.includes('bni'))) return true;
+          if (lower.includes('cimb') && (aProv.includes('cimb') || aName.includes('cimb'))) return true;
+          if (lower.includes('jago') && (aProv.includes('jago') || aName.includes('jago'))) return true;
+          if (lower.includes('seabank') && (aProv.includes('seabank') || aName.includes('seabank'))) return true;
+          if (lower.includes('gopay') && (aProv.includes('gopay') || aName.includes('gopay'))) return true;
+          if (lower.includes('ovo') && (aProv.includes('ovo') || aName.includes('ovo'))) return true;
+          if (lower.includes('dana') && (aProv.includes('dana') || aName.includes('dana'))) return true;
+          if ((lower.includes('shopee') || lower.includes('spay')) && (aProv.includes('shopee') || aName.includes('shopee'))) return true;
+          if ((lower.includes('tunai') || lower.includes('cash') || lower.includes('dompet')) && (a.type === 'cash' || aProv.includes('cash') || aName.includes('tunai') || aName.includes('cash'))) return true;
+          return false;
+        });
+
+        if (found) {
+          accountName = found.name;
+        } else if (isIncome) {
+          const bank = userAccounts.find((a) => a.type === 'bank');
+          accountName = bank ? bank.name : userAccounts[0].name;
+        } else {
+          const cash = userAccounts.find((a) => a.type === 'cash');
+          accountName = cash ? cash.name : userAccounts[0].name;
+        }
+
+        if (isTransfer) {
+          const other = userAccounts.find((a) => a.name !== accountName);
+          destAccountName = other ? other.name : undefined;
+        }
+      } else {
+        if (/bca/i.test(lower)) accountName = 'BCA Tahapan';
+        else if (/mandiri/i.test(lower)) accountName = 'Mandiri Tabungan Livin';
+        else if (/bri/i.test(lower)) accountName = 'BRI BritAma';
+        else if (/bni/i.test(lower)) accountName = 'BNI Taplus';
+        else if (/gopay/i.test(lower)) accountName = 'GoPay Saldo Utama';
+        else if (/ovo/i.test(lower)) accountName = 'OVO Premier';
+        else if (/dana/i.test(lower)) accountName = 'DANA Saldo';
+        else if (/shopee/i.test(lower)) accountName = 'ShopeePay Plus';
+        else if (/bibit/i.test(lower)) accountName = 'Bibit Portofolio Investasi';
+        else if (/cash|tunai/i.test(lower)) accountName = 'Dompet Tunai (Cash)';
+      }
 
       // Guess Category
       let category = isIncome ? 'Gaji & Pendapatan' : 'Makanan & Minuman';

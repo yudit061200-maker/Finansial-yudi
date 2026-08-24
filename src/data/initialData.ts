@@ -424,6 +424,69 @@ export const SAMPLE_RECEIPTS = [
 
 export const INITIAL_DEBTS: DebtRecord[] = [
   {
+    id: 'debt-kredit-1',
+    type: 'installment',
+    isInstallment: true,
+    itemName: 'iPhone 15 Pro 256GB Black Titanium',
+    providerName: 'SpayLater (Shopee)',
+    personName: 'SpayLater (Shopee)',
+    title: 'Kredit HP iPhone 15 Pro 256GB',
+    originalPrice: 20999000,
+    downPayment: 2999000,
+    tenorMonths: 12,
+    paidMonths: 5,
+    monthlyInstallment: 1680000,
+    interestRatePercent: 1.2,
+    adminFee: 25000,
+    dueDayOfMonth: 5,
+    totalAmount: 20160000, // 12 x 1.680.000
+    paidAmount: 8400000, // 5 x 1.680.000
+    remainingAmount: 11760000, // 7 x 1.680.000
+    dueDate: '2026-09-05',
+    startDate: '2026-04-05',
+    status: 'partial',
+    category: 'Kredit Gadget & Elektronik',
+    notes: 'Cicilan bulan ke-5 dari 12 bulan (Sisa 7 bulan lagi). Jatuh tempo tiap tanggal 5.',
+    payments: [
+      { id: 'pay-spay-1', date: '2026-05-05', amount: 1680000, accountId: 'acc-bca', notes: 'Cicilan Bulan Ke-1', monthNumber: 1 },
+      { id: 'pay-spay-2', date: '2026-06-05', amount: 1680000, accountId: 'acc-bca', notes: 'Cicilan Bulan Ke-2', monthNumber: 2 },
+      { id: 'pay-spay-3', date: '2026-07-05', amount: 1680000, accountId: 'acc-bca', notes: 'Cicilan Bulan Ke-3', monthNumber: 3 },
+      { id: 'pay-spay-4', date: '2026-08-05', amount: 1680000, accountId: 'acc-bca', notes: 'Cicilan Bulan Ke-4', monthNumber: 4 },
+      { id: 'pay-spay-5', date: '2026-08-20', amount: 1680000, accountId: 'acc-bca', notes: 'Cicilan Bulan Ke-5', monthNumber: 5 }
+    ],
+    createdAt: '2026-04-05T10:00:00.000Z'
+  },
+  {
+    id: 'debt-kredit-2',
+    type: 'installment',
+    isInstallment: true,
+    itemName: 'Smart TV Samsung 55 Inch 4K Crystal UHD',
+    providerName: 'Kredivo PayLater',
+    personName: 'Kredivo PayLater',
+    title: 'Kredit Samsung Smart TV 55 Inch',
+    originalPrice: 7200000,
+    downPayment: 0,
+    tenorMonths: 6,
+    paidMonths: 2,
+    monthlyInstallment: 1296000,
+    interestRatePercent: 1.0,
+    adminFee: 15000,
+    dueDayOfMonth: 15,
+    totalAmount: 7776000, // 6 x 1.296.000
+    paidAmount: 2592000, // 2 x 1.296.000
+    remainingAmount: 5184000, // 4 x 1.296.000
+    dueDate: '2026-09-15',
+    startDate: '2026-07-15',
+    status: 'partial',
+    category: 'Kredit Elektronik & Rumah',
+    notes: 'Cicilan bulan ke-2 dari 6 bulan (Sisa 4 bulan lagi). Autodebet BCA.',
+    payments: [
+      { id: 'pay-kred-1', date: '2026-07-15', amount: 1296000, accountId: 'acc-bca', notes: 'Cicilan Bulan Ke-1', monthNumber: 1 },
+      { id: 'pay-kred-2', date: '2026-08-15', amount: 1296000, accountId: 'acc-bca', notes: 'Cicilan Bulan Ke-2', monthNumber: 2 }
+    ],
+    createdAt: '2026-07-15T14:30:00.000Z'
+  },
+  {
     id: 'debt-1',
     type: 'payable',
     personName: 'Bank BCA (KTA Personal)',
@@ -435,31 +498,13 @@ export const INITIAL_DEBTS: DebtRecord[] = [
     startDate: '2026-05-15',
     status: 'partial',
     category: 'Cicilan Bank',
-    notes: 'Cicilan bulan ke-4 dari 12 bulan (Rp 1.000.000 / bln)',
+    notes: 'Cicilan pinjaman dana tunai bulan ke-4 dari 12 bulan (Rp 1.000.000 / bln)',
     payments: [
       { id: 'pay-1', date: '2026-06-15', amount: 1000000, accountId: 'acc-bca', notes: 'Cicilan Ke-1' },
       { id: 'pay-2', date: '2026-07-15', amount: 1000000, accountId: 'acc-bca', notes: 'Cicilan Ke-2' },
       { id: 'pay-3', date: '2026-08-15', amount: 2000000, accountId: 'acc-bca', notes: 'Cicilan Ke-3 & Ke-4' }
     ],
     createdAt: '2026-05-15T10:00:00.000Z'
-  },
-  {
-    id: 'debt-2',
-    type: 'payable',
-    personName: 'Kredivo PayLater',
-    title: 'Cicilan Gadget Monitor 4K',
-    totalAmount: 2400000,
-    paidAmount: 800000,
-    remainingAmount: 1600000,
-    dueDate: '2026-09-02',
-    startDate: '2026-07-02',
-    status: 'partial',
-    category: 'PayLater',
-    notes: 'Bunga 0% tenor 3 bulan',
-    payments: [
-      { id: 'pay-4', date: '2026-08-02', amount: 800000, accountId: 'acc-mandiri', notes: 'Cicilan Bulan Pertama' }
-    ],
-    createdAt: '2026-07-02T14:30:00.000Z'
   },
   {
     id: 'debt-3',

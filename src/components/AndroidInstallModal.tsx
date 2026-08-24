@@ -79,9 +79,9 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in select-none">
-      <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 flex flex-col">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col transition-colors">
         {/* Header with Android Theme */}
-        <div className="p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 text-white rounded-t-3xl relative overflow-hidden shrink-0">
+        <div className="p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 dark:from-indigo-900 dark:to-slate-900 text-white rounded-t-3xl relative overflow-hidden shrink-0">
           <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
           <button
             onClick={onClose}
@@ -112,13 +112,13 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
         </div>
 
         {/* Navigation Switch */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex gap-2 shrink-0">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex gap-2 shrink-0">
           <button
             onClick={() => setActiveGuideTab('pwa')}
             className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeGuideTab === 'pwa'
-                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/60 dark:border-slate-700'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Zap className="w-3.5 h-3.5" />
@@ -128,8 +128,8 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
             onClick={() => setActiveGuideTab('apk')}
             className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               activeGuideTab === 'apk'
-                ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/60'
-                : 'text-slate-500 hover:text-slate-800'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/60 dark:border-slate-700'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
@@ -143,21 +143,21 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
             <>
               {/* Status Banner */}
               {isInstalled ? (
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <div>
-                    <div className="text-xs font-bold text-emerald-900">Aplikasi Terpasang!</div>
-                    <div className="text-[11px] text-emerald-700">
+                    <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">Aplikasi Terpasang!</div>
+                    <div className="text-[11px] text-emerald-700 dark:text-emerald-300">
                       ArthaSmart sudah aktif dalam mode aplikasi standalone di perangkat Anda.
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex flex-col gap-3">
+                <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex flex-col gap-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="text-xs font-bold text-indigo-950">Pasang Instan ke Layar Utama</h4>
-                      <p className="text-[11px] text-indigo-700 mt-0.5">
+                      <h4 className="text-xs font-bold text-indigo-950 dark:text-indigo-200">Pasang Instan ke Layar Utama</h4>
+                      <p className="text-[11px] text-indigo-700 dark:text-indigo-400 mt-0.5">
                         Bebas penyimpanan besar (&lt; 2 MB), tidak perlu download manual dari Play Store.
                       </p>
                     </div>
@@ -165,7 +165,7 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
 
                   <button
                     onClick={handleInstallClick}
-                    className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm shadow-indigo-200 transition-all cursor-pointer"
+                    className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm shadow-indigo-200 dark:shadow-none transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
                     <span>Instal ArthaSmart ke Android</span>
@@ -175,42 +175,42 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
 
               {/* Step by Step Manual Guide for Chrome Android */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                   Cara Pasang Manual di Google Chrome Android:
                 </h4>
 
                 <div className="space-y-2 text-xs">
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80">
                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                       1
                     </span>
                     <div>
-                      <span className="font-semibold text-slate-800">Tekan Menu Titik Tiga (⋮)</span>
-                      <p className="text-slate-500 text-[11px] mt-0.5">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">Tekan Menu Titik Tiga (⋮)</span>
+                      <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
                         Di pojok kanan atas browser Google Chrome pada ponsel Android Anda.
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80">
                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                       2
                     </span>
                     <div>
-                      <span className="font-semibold text-slate-800">Pilih "Tambahkan ke Layar Utama" / "Instal Aplikasi"</span>
-                      <p className="text-slate-500 text-[11px] mt-0.5">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">Pilih "Tambahkan ke Layar Utama" / "Instal Aplikasi"</span>
+                      <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
                         Chrome akan otomatis membuat icon aplikasi resmi ArthaSmart di daftar aplikasi Android Anda.
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80">
                     <span className="w-5 h-5 rounded-full bg-emerald-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
                       3
                     </span>
                     <div>
-                      <span className="font-semibold text-slate-800">Buka Langsung Seperti Aplikasi Native</span>
-                      <p className="text-slate-500 text-[11px] mt-0.5">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">Buka Langsung Seperti Aplikasi Native</span>
+                      <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
                         Tampil full-screen tanpa address bar browser, lengkap dengan navigasi bottom bar.
                       </p>
                     </div>
@@ -220,22 +220,22 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
 
               {/* Native Android Features Checklist */}
               <div className="pt-2">
-                <h4 className="text-xs font-bold text-slate-800 mb-2">Fitur Khusus Android:</h4>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">Fitur Khusus Android:</h4>
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2 text-slate-700">
-                    <Camera className="w-3.5 h-3.5 text-indigo-600" />
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <Camera className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     <span>Akses Kamera OCR</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2 text-slate-700">
-                    <WifiOff className="w-3.5 h-3.5 text-emerald-600" />
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <WifiOff className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Offline Cache Shell</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2 text-slate-700">
-                    <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <Zap className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
                     <span>Haptic Touch Vibration</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center gap-2 text-slate-700">
-                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     <span>Real-time Firestore</span>
                   </div>
                 </div>
@@ -245,18 +245,18 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
             <>
               {/* TWA / APK Build Info */}
               <div className="space-y-4 text-xs">
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
-                  <h4 className="font-bold text-slate-900 mb-1">Kemasan Paket APK & Google Play (TWA)</h4>
-                  <p className="text-slate-600 text-[11px] leading-relaxed">
-                    Aplikasi ini telah memenuhi standar <strong>Trusted Web Activity (TWA)</strong> dan <strong>WebAPK</strong> resmi dari Google. Anda dapat membungkusnya menjadi file <code className="text-indigo-600 font-mono">.apk</code> atau <code className="text-indigo-600 font-mono">.aab</code> siap rilis ke Google Play Store.
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                  <h4 className="font-bold text-slate-900 dark:text-white mb-1">Kemasan Paket APK & Google Play (TWA)</h4>
+                  <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                    Aplikasi ini telah memenuhi standar <strong>Trusted Web Activity (TWA)</strong> dan <strong>WebAPK</strong> resmi dari Google. Anda dapat membungkusnya menjadi file <code className="text-indigo-600 dark:text-indigo-400 font-mono">.apk</code> atau <code className="text-indigo-600 dark:text-indigo-400 font-mono">.aab</code> siap rilis ke Google Play Store.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="p-3.5 rounded-xl border border-slate-200 flex items-center justify-between hover:border-indigo-300 transition-colors">
+                  <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors">
                     <div>
-                      <div className="font-bold text-slate-800">1. PWABuilder (Instan APK Generator)</div>
-                      <div className="text-[11px] text-slate-500">
+                      <div className="font-bold text-slate-800 dark:text-slate-200">1. PWABuilder (Instan APK Generator)</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
                         Generator otomatis dari Microsoft untuk membuat APK Android siap pakai.
                       </div>
                     </div>
@@ -264,16 +264,16 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
                       href="https://www.pwabuilder.com"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 cursor-pointer"
+                      className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 cursor-pointer"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
 
-                  <div className="p-3.5 rounded-xl border border-slate-200 flex items-center justify-between hover:border-indigo-300 transition-colors">
+                  <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between hover:border-indigo-300 dark:hover:border-indigo-500 transition-colors">
                     <div>
-                      <div className="font-bold text-slate-800">2. Google Bubblewrap CLI</div>
-                      <div className="text-[11px] text-slate-500">
+                      <div className="font-bold text-slate-800 dark:text-slate-200">2. Google Bubblewrap CLI</div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
                         CLI resmi Google Chrome untuk build file Android App Bundle (.aab) Play Store.
                       </div>
                     </div>
@@ -281,14 +281,14 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
                       href="https://github.com/GoogleChromeLabs/bubblewrap"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 cursor-pointer"
+                      className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900 cursor-pointer"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </div>
                 </div>
 
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px]">
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 text-[11px]">
                   <strong>Tips:</strong> Untuk pemakaian sehari-hari tanpa build tools, cukup pilih tab <strong>"Instal Langsung (PWA)"</strong> dan klik tombol <strong>"Instal ArthaSmart"</strong> pada browser ponsel Anda.
                 </div>
               </div>
@@ -297,10 +297,10 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex justify-end shrink-0">
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+            className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
           >
             Tutup
           </button>

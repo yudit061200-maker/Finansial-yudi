@@ -157,6 +157,54 @@ app.post('/api/ai/parse-chat', async (req, res) => {
 
     const ai = getGeminiClient();
     const currentDate = new Date().toISOString().split('T')[0];
+    const userAccounts: Array<{ id: string; name: string; type: string; provider: string; balance?: number }> =
+      financialContext?.availableAccounts || [];
+
+    // Helper to resolve account from available accounts list based on text
+    const findAccountFromText = (text: string, defaultType: 'expense' | 'income' | 'transfer' = 'expense') => {
+      const lower = text.toLowerCase();
+      if (userAccounts.length === 0) {
+        if (lower.includes('bca')) return 'BCA Tahapan';
+        if (lower.includes('mandiri')) return 'Mandiri Tabungan';
+        if (lower.includes('bri')) return 'BRI BritAma';
+        if (lower.includes('bni')) return 'BNI Taplus';
+        if (lower.includes('gopay')) return 'GoPay Saldo Utama';
+        if (lower.includes('ovo')) return 'OVO Premier';
+        if (lower.includes('dana')) return 'DANA Saldo';
+        if (lower.includes('shopee') || lower.includes('spay')) return 'ShopeePay';
+        if (lower.includes('cash') || lower.includes('tunai')) return 'Dompet Tunai (Cash)';
+        return defaultType === 'income' ? 'BCA Tahapan' : 'Dompet Tunai (Cash)';
+      }
+
+      // Check specific bank/wallet keywords in user text
+      const matched = userAccounts.find((a) => {
+        const aName = a.name.toLowerCase();
+        const aProv = (a.provider || '').toLowerCase();
+        if (lower.includes('bca') && (aProv.includes('bca') || aName.includes('bca'))) return true;
+        if (lower.includes('mandiri') && (aProv.includes('mandiri') || aName.includes('mandiri'))) return true;
+        if (lower.includes('bri') && (aProv.includes('bri') || aName.includes('bri'))) return true;
+        if (lower.includes('bni') && (aProv.includes('bni') || aName.includes('bni'))) return true;
+        if (lower.includes('cimb') && (aProv.includes('cimb') || aName.includes('cimb'))) return true;
+        if (lower.includes('jago') && (aProv.includes('jago') || aName.includes('jago'))) return true;
+        if (lower.includes('seabank') && (aProv.includes('seabank') || aName.includes('seabank'))) return true;
+        if (lower.includes('gopay') && (aProv.includes('gopay') || aName.includes('gopay'))) return true;
+        if (lower.includes('ovo') && (aProv.includes('ovo') || aName.includes('ovo'))) return true;
+        if (lower.includes('dana') && (aProv.includes('dana') || aName.includes('dana'))) return true;
+        if ((lower.includes('shopee') || lower.includes('spay')) && (aProv.includes('shopee') || aName.includes('shopee'))) return true;
+        if ((lower.includes('tunai') || lower.includes('cash') || lower.includes('dompet')) && (a.type === 'cash' || aProv.includes('cash') || aName.includes('tunai') || aName.includes('cash'))) return true;
+        return aName.includes(lower) || lower.includes(aName);
+      });
+
+      if (matched) return matched.name;
+
+      // If no explicit bank/wallet in text:
+      if (defaultType === 'income') {
+        const bankAcc = userAccounts.find((a) => a.type === 'bank');
+        return bankAcc ? bankAcc.name : userAccounts[0]?.name || 'Rekening Bank Utama';
+      }
+      const cashAcc = userAccounts.find((a) => a.type === 'cash' || (a.provider || '').toLowerCase().includes('cash'));
+      return cashAcc ? cashAcc.name : userAccounts[0]?.name || 'Dompet Tunai (Cash)';
+    };
 
     if (!ai) {
       // Fallback parser if Gemini key is not present
@@ -171,45 +219,74 @@ app.post('/api/ai/parse-chat', async (req, res) => {
       }
 
       const isIncome = /gaji|masuk|terima|pendapatan|transferan dari/i.test(lower);
+      const isTransfer = /transfer|pindah|topup|top up|isi saldo/i.test(lower) && !isIncome;
+      const txType = isIncome ? 'income' : isTransfer ? 'transfer' : 'expense';
+      const resolvedAccount = findAccountFromText(message, txType);
+
+      let destAccountName: string | undefined = undefined;
+      if (isTransfer) {
+        // Guess destination
+        const destMatch = userAccounts.find((a) => a.name !== resolvedAccount);
+        destAccountName = destMatch ? destMatch.name : 'GoPay Saldo Utama';
+      }
+
       return res.json({
-        action: 'ADD_TRANSACTION',
-        aiReply: `Saya telah mencatat ${isIncome ? 'pemasukan' : 'pengeluaran'} sebesar Rp ${parsedAmount.toLocaleString('id-ID')}. Silakan periksa detailnya di bawah.`,
+        action: isTransfer ? 'TRANSFER' : 'ADD_TRANSACTION',
+        aiReply: `Saya telah mencatat ${isIncome ? 'pemasukan' : isTransfer ? 'transfer dana' : 'pengeluaran'} sebesar Rp ${parsedAmount.toLocaleString('id-ID')} pada akun ${resolvedAccount}.`,
         transactions: [
           {
-            type: isIncome ? 'income' : 'expense',
+            type: txType,
             amount: parsedAmount,
             title: message.slice(0, 40),
-            category: isIncome ? 'Gaji & Pendapatan' : 'Makanan & Minuman',
-            accountName: lower.includes('bca') ? 'BCA Tahapan' : lower.includes('mandiri') ? 'Mandiri Tabungan' : lower.includes('gopay') ? 'GoPay' : 'Tunai / Cash',
+            category: isIncome ? 'Gaji & Pendapatan' : isTransfer ? 'Transfer Antar Rekening' : 'Makanan & Minuman',
+            accountName: resolvedAccount,
+            destinationAccountName: destAccountName,
             date: currentDate,
             notes: message,
             tags: ['AI-Chat'],
           },
         ],
-        financialInsight: '💡 Tips: Selalu catat pengeluaran harian tepat waktu agar arus kas bulanan tetap terkontrol.',
+        financialInsight: '💡 Tips: Catatan transaksi otomatis disinkronkan ke saldo akun Anda di Firebase.',
       });
     }
 
+    const accountsContextStr = userAccounts.length > 0
+      ? userAccounts.map((a) => `- ID: ${a.id} | Nama: "${a.name}" | Tipe: ${a.type} | Provider: ${a.provider} | Saldo: Rp ${a.balance || 0}`).join('\n')
+      : '- (Belum ada akun kustom, gunakan akun standar seperti BCA, Mandiri, GoPay, DANA, OVO, Cash)';
+
     const systemPrompt = `Kamu adalah ArthaAI, asisten keuangan pribadi cerdas Indonesia yang ramah, ringkas, dan sangat ahli dalam akuntansi praktis & keuangan keluarga.
-Tugasmu:
-1. Jika pengguna menyampaikan catatan pengeluaran, pemasukan, atau transfer (contoh: "makan siang nasi padang 25rb pake qris bca", "beli bensin pertamax 50.000 cash", "gajian masuk 10 juta ke mandiri", "transfer 500rb dari BCA ke GoPay", "kemarin beli kopi 35rb dan donat 20rb di starbucks"):
-   - Set action: "ADD_TRANSACTION"
-   - Ekstrak 1 atau lebih transaksi dalam array 'transactions'.
-   - Konversi singkatan angka Indonesia: '25rb' / '25k' = 25000, '1.5jt' / '1,5 juta' = 1500000, '500rb' = 500000.
-   - Tentukan type: 'expense' (pengeluaran), 'income' (pemasukan), atau 'transfer' (pindah buku antarrekening).
-   - Tentukan kategori yang paling tepat dari:
-     ["Makanan & Minuman", "Belanja & Groceries", "Transportasi", "Tagihan & Utilitas", "Hiburan & Rekreasi", "Kesehatan & Farmasi", "Pendidikan & Kerja", "Investasi & Tabungan", "Gaji & Pendapatan", "Bisnis & Sampingan", "Hadiah & Bonus", "Transfer Antar Rekening", "Lain-lain"].
-   - Identifikasi akun/dompet: "BCA Tahapan", "Mandiri Tabungan", "BRI BritAma", "BNI Taplus", "GoPay", "OVO", "ShopeePay", "DANA", "Tunai / Cash", "Bibit / Investasi", "Kartu Kredit". Jika tidak disebutkan, tebak yang paling wajar atau gunakan "Tunai / Cash".
-   - Jika transfer, tentukan 'destinationAccountName'.
-   - Buat jawaban 'aiReply' yang ramah, jelas, dan menyemangati dalam Bahasa Indonesia.
 
-2. Jika pengguna bertanya tentang status keuangan, tips berhemat, cek budget, atau pertanyaan finansial:
-   - Set action: "FINANCIAL_ADVICE" atau "QUERY_FINANCES".
-   - Berikan jawaban 'aiReply' yang solutif, berdasarkan konteks keuangan jika ada.
-   - Kosongkan 'transactions' atau berikan array kosong.
+DAFTAR REKENING & DOMPET PENGGUNA YANG TERDAFTAR DI APLIKASI:
+${accountsContextStr}
 
-Konteks Keuangan Pengguna Saat Ini:
-${financialContext ? JSON.stringify(financialContext) : 'Total Saldo: Rp 18.500.000, Pengeluaran Bulan Ini: Rp 4.250.000'}
+ATURAN WAJIB PEMILIHAN AKUN ('accountName' & 'destinationAccountName'):
+1. Kamu HARUS mencocokkan akun pembayaran PERSIS dengan apa yang diketik pengguna dalam chat:
+   - Jika pengguna menyebut "bca" / "qris bca" / "debit bca" -> pilih nama akun BCA pengguna dari daftar di atas.
+   - Jika pengguna menyebut "mandiri" / "livin" -> pilih nama akun Mandiri pengguna dari daftar di atas.
+   - Jika pengguna menyebut "bri" / "brimo" -> pilih nama akun BRI pengguna dari daftar di atas.
+   - Jika pengguna menyebut "bni" / "wondr" -> pilih nama akun BNI pengguna dari daftar di atas.
+   - Jika pengguna menyebut "cimb" / "octo" -> pilih nama akun CIMB pengguna dari daftar di atas.
+   - Jika pengguna menyebut "jago" -> pilih nama akun Bank Jago pengguna dari daftar di atas.
+   - Jika pengguna menyebut "seabank" -> pilih nama akun SeaBank pengguna dari daftar di atas.
+   - Jika pengguna menyebut "gopay" / "gojek" -> pilih nama akun GoPay pengguna dari daftar di atas.
+   - Jika pengguna menyebut "ovo" -> pilih nama akun OVO pengguna dari daftar di atas.
+   - Jika pengguna menyebut "dana" -> pilih nama akun DANA pengguna dari daftar di atas.
+   - Jika pengguna menyebut "shopee" / "spay" / "shopeepay" -> pilih nama akun ShopeePay pengguna dari daftar di atas.
+   - Jika pengguna menyebut "cash" / "tunai" / "dompet" / "uang fisik" -> pilih nama akun tipe 'cash' (Dompet Tunai) dari daftar di atas.
+   - Jika pengguna TIDAK menyebutkan nama bank/dompet sama sekali dalam pesannya:
+     * Pengeluaran kecil harian (makan, jajan, parkir, bensin, warung): gunakan akun tipe 'cash' (Dompet Tunai) jika tersedia.
+     * Pemasukan / Gaji: gunakan akun rekening bank utama.
+2. Jika transaksi TRANSFER / PINDAH DANA (contoh: "transfer 500rb dari BCA ke GoPay" atau "topup dana 100rb pake mandiri"):
+   - 'accountName' adalah akun ASAL / Pengirim dana (misal: BCA atau Mandiri).
+   - 'destinationAccountName' adalah akun TUJUAN / Penerima dana (misal: GoPay atau DANA).
+3. Pastikan format 'accountName' dan 'destinationAccountName' menggunakan NAMA AKUN PERSIS seperti yang tercantum di daftar akun pengguna di atas agar pemotongan dan penambahan saldo tepat sasaran!
+
+Tugas Lainnya:
+- Konversi nominal: '25rb' / '25k' = 25000, '1.5jt' = 1500000, '500rb' = 500000.
+- Tentukan type: 'expense', 'income', atau 'transfer'.
+- Tentukan kategori: ["Makanan & Minuman", "Belanja & Groceries", "Transportasi", "Tagihan & Utilitas", "Hiburan & Rekreasi", "Kesehatan & Farmasi", "Pendidikan & Kerja", "Investasi & Tabungan", "Gaji & Pendapatan", "Bisnis & Sampingan", "Hadiah & Bonus", "Transfer Antar Rekening", "Lain-lain"].
+- Sertakan dalam 'aiReply' penjelasan ramah yang menyebutkan akun mana yang terpotong/bertambah (contoh: "Sudah saya catat! Pengeluaran Rp 25.000 untuk Makan Siang dipotong dari saldo GoPay Anda.").
+
 Tanggal Hari Ini: ${currentDate}`;
 
     const response = await ai.models.generateContent({

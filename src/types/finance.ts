@@ -80,8 +80,8 @@ export interface FinancialGoal {
   isCompleted?: boolean;
 }
 
-// Hutang & Piutang Types
-export type DebtType = 'payable' | 'receivable'; // payable = Hutang (Saya berhutang), receivable = Piutang (Orang berhutang ke saya)
+// Hutang, Piutang & Kredit / Cicilan Barang Types
+export type DebtType = 'payable' | 'receivable' | 'installment'; // payable = Hutang Pinjaman, receivable = Piutang, installment = Kredit / Cicilan Barang
 export type DebtStatus = 'unpaid' | 'partial' | 'paid';
 
 export interface DebtPayment {
@@ -91,24 +91,38 @@ export interface DebtPayment {
   accountId?: string;
   notes?: string;
   transactionId?: string;
+  monthNumber?: number; // Cicilan Bulan Ke- (misal: Bulan ke-1, Bulan ke-2, dst.)
 }
 
 export interface DebtRecord {
   id: string;
   type: DebtType;
-  personName: string; // Pihak Terkait (Teman / Lembaga / Bank)
+  personName: string; // Pihak Terkait / Lembaga / Toko (Kredivo, SpayLater, Bank BCA, dll.)
   contactPhone?: string; // WhatsApp / Phone
-  title: string; // Keperluan / Keterangan
-  totalAmount: number; // Jumlah Total
-  paidAmount: number; // Jumlah yang Sudah Dibayar
-  remainingAmount: number; // Sisa
-  dueDate?: string; // Jatuh tempo
-  startDate: string; // Tanggal Mulai
+  title: string; // Keperluan / Nama Barang (misal: Cicilan iPhone 15, Honda Vario 160)
+  totalAmount: number; // Jumlah Total Kewajiban (Pokok + Bunga / Total Harga Kredit)
+  paidAmount: number; // Jumlah yang Sudah Dibayar (Rp)
+  remainingAmount: number; // Sisa yang Belum Dibayar (Rp)
+  dueDate?: string; // Jatuh tempo terdekat / akhir
+  startDate: string; // Tanggal Mulai / Pembelian
   status: DebtStatus; // 'unpaid' | 'partial' | 'paid'
   notes?: string;
-  category?: string;
+  category?: string; // e.g. "Kredit Gadget & Elektronik", "Cicilan Kendaraan", "PayLater", dll.
   payments: DebtPayment[];
   createdAt: string;
+
+  // Fitur Khusus Kredit & Cicilan Barang
+  isInstallment?: boolean;
+  itemName?: string; // Nama barang yang dikredit
+  providerName?: string; // Penyedia cicilan (Kredivo, SpayLater, Akulaku, BCA Cicilan, dll.)
+  originalPrice?: number; // Harga Cash Asli Barang
+  downPayment?: number; // Uang Muka / DP yang sudah dibayar di awal
+  tenorMonths?: number; // Total Tenor dalam Bulan (misal: 3, 6, 12, 24, 36 bulan)
+  paidMonths?: number; // Berapa bulan angsuran yang SUDAH DIBAYAR (misal: 4 dari 12 bulan)
+  monthlyInstallment?: number; // Nominal Angsuran Pokok + Bunga per Bulan (Rp)
+  interestRatePercent?: number; // Suku Bunga per Bulan (%) atau per Tahun
+  adminFee?: number; // Biaya Admin / Layanan Bulanan
+  dueDayOfMonth?: number; // Tanggal Jatuh Tempo Setiap Bulan (misal: tanggal 5 atau 25)
 }
 
 export interface ParsedReceiptData {

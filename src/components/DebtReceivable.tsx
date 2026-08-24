@@ -16,14 +16,8 @@ import {
   Clock,
   Plus,
   Search,
-  Filter,
   Trash2,
   Edit2,
-  MessageCircle,
-  Share2,
-  DollarSign,
-  ChevronDown,
-  ChevronUp,
   History,
   X,
   CreditCard,
@@ -33,6 +27,14 @@ import {
   Check,
   Phone,
   HelpCircle,
+  Calculator,
+  ShoppingBag,
+  PackageCheck,
+  TrendingDown,
+  Sparkles,
+  Layers,
+  ChevronRight,
+  Info,
 } from 'lucide-react';
 
 interface DebtReceivableProps {
@@ -50,7 +52,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   onDeleteDebt,
   onAddTransaction,
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'payable' | 'receivable'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'installment' | 'payable' | 'receivable'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | DebtStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'dueDate' | 'amount' | 'createdAt'>('dueDate');
@@ -58,6 +60,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DebtRecord | null>(null);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
 
   // Payment/Installment Modal State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -67,12 +70,19 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   const [paymentAccountId, setPaymentAccountId] = useState<string>(accounts[0]?.id || '');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [syncWithTransaction, setSyncWithTransaction] = useState<boolean>(true);
+  const [payingMonthNumber, setPayingMonthNumber] = useState<number | undefined>(undefined);
 
   // Expanded Payment History Accordions
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
 
   // Summary Calculations
   const summary = useMemo(() => {
+    const installments = debts.filter((d) => d.type === 'installment' || d.isInstallment);
+    const totalInstallmentRemaining = installments
+      .filter((d) => d.status !== 'paid')
+      .reduce((sum, d) => sum + d.remainingAmount, 0);
+    const totalInstallmentPaid = installments.reduce((sum, d) => sum + d.paidAmount, 0);
+
     const totalPayable = debts
       .filter((d) => d.type === 'payable' && d.status !== 'paid')
       .reduce((sum, d) => sum + d.remainingAmount, 0);
@@ -89,6 +99,9 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       .filter((d) => d.type === 'receivable')
       .reduce((sum, d) => sum + d.paidAmount, 0);
 
+    // Total Semua Kewajiban (Hutang Tunai + Kredit Barang)
+    const totalAllLiabilities = totalPayable + totalInstallmentRemaining;
+
     // Overdue or upcoming within 7 days
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -100,12 +113,16 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     }).length;
 
     return {
+      totalInstallmentRemaining,
+      totalInstallmentPaid,
       totalPayable,
       totalReceivable,
-      netBalance: totalReceivable - totalPayable,
+      totalAllLiabilities,
+      netBalance: totalReceivable - totalAllLiabilities,
       totalPaidPayable,
       totalPaidReceivable,
       urgentCount,
+      activeInstallmentCount: installments.filter((d) => d.status !== 'paid').length,
     };
   }, [debts]);
 
@@ -113,21 +130,30 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   const filteredDebts = useMemo(() => {
     return debts
       .filter((d) => {
-        if (activeTab !== 'all' && d.type !== activeTab) return false;
+        if (activeTab === 'installment') {
+          if (d.type !== 'installment' && !d.isInstallment) return false;
+        } else if (activeTab === 'payable') {
+          if (d.type !== 'payable') return false;
+        } else if (activeTab === 'receivable') {
+          if (d.type !== 'receivable') return false;
+        }
+
         if (statusFilter !== 'all' && d.status !== statusFilter) return false;
+
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
           const matchPerson = d.personName.toLowerCase().includes(q);
           const matchTitle = d.title.toLowerCase().includes(q);
+          const matchItem = d.itemName?.toLowerCase().includes(q) || false;
+          const matchProvider = d.providerName?.toLowerCase().includes(q) || false;
           const matchCategory = d.category?.toLowerCase().includes(q) || false;
           const matchNotes = d.notes?.toLowerCase().includes(q) || false;
-          if (!matchPerson && !matchTitle && !matchCategory && !matchNotes) return false;
+          if (!matchPerson && !matchTitle && !matchItem && !matchProvider && !matchCategory && !matchNotes) return false;
         }
         return true;
       })
       .sort((a, b) => {
         if (sortBy === 'dueDate') {
-          // Unpaid first, then nearest due date
           if (a.status !== 'paid' && b.status === 'paid') return -1;
           if (a.status === 'paid' && b.status !== 'paid') return 1;
           const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
@@ -145,12 +171,29 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     setExpandedHistories((prev) => ({ ...prev, [debtId]: !prev[debtId] }));
   };
 
-  const handleOpenPaymentModal = (debt: DebtRecord) => {
+  // Open Payment for Regular or Installment
+  const handleOpenPaymentModal = (debt: DebtRecord, monthNum?: number) => {
     setActivePaymentDebt(debt);
-    setPaymentAmount(debt.remainingAmount);
+    const isInst = debt.type === 'installment' || debt.isInstallment;
+
+    if (isInst && debt.monthlyInstallment && debt.monthlyInstallment > 0) {
+      // Default to 1 month installment amount or remaining amount if less
+      const nextMonth = (debt.paidMonths || 0) + 1;
+      setPayingMonthNumber(monthNum || nextMonth);
+      setPaymentAmount(Math.min(debt.monthlyInstallment, debt.remainingAmount));
+      setPaymentNotes(`Pembayaran Angsuran Bulan Ke-${monthNum || nextMonth}: ${debt.title}`);
+    } else {
+      setPayingMonthNumber(undefined);
+      setPaymentAmount(debt.remainingAmount);
+      setPaymentNotes(
+        debt.type === 'payable'
+          ? `Cicilan pelunasan hutang: ${debt.title}`
+          : `Penerimaan pelunasan piutang: ${debt.title}`
+      );
+    }
+
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setPaymentAccountId(accounts[0]?.id || '');
-    setPaymentNotes(debt.type === 'payable' ? `Cicilan pelunasan hutang: ${debt.title}` : `Penerimaan pelunasan piutang: ${debt.title}`);
     setSyncWithTransaction(true);
     setIsPaymentModalOpen(true);
   };
@@ -158,54 +201,87 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   const handleSavePayment = async () => {
     if (!activePaymentDebt || paymentAmount <= 0) return;
 
+    const isInst = activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment;
     const newPaidAmount = activePaymentDebt.paidAmount + paymentAmount;
     const newRemainingAmount = Math.max(0, activePaymentDebt.totalAmount - newPaidAmount);
     const newStatus: DebtStatus = newRemainingAmount === 0 ? 'paid' : 'partial';
+
+    // Calculate new paid months for installments
+    let newPaidMonths = activePaymentDebt.paidMonths || 0;
+    if (isInst) {
+      if (payingMonthNumber && payingMonthNumber > newPaidMonths) {
+        newPaidMonths = payingMonthNumber;
+      } else if (activePaymentDebt.monthlyInstallment && activePaymentDebt.monthlyInstallment > 0) {
+        const addedMonths = Math.max(1, Math.round(paymentAmount / activePaymentDebt.monthlyInstallment));
+        newPaidMonths = Math.min(activePaymentDebt.tenorMonths || 12, newPaidMonths + addedMonths);
+      } else {
+        newPaidMonths += 1;
+      }
+      if (newRemainingAmount === 0 && activePaymentDebt.tenorMonths) {
+        newPaidMonths = activePaymentDebt.tenorMonths;
+      }
+    }
+
+    const nextMonthNum = isInst ? (payingMonthNumber || (activePaymentDebt.paidMonths || 0) + 1) : undefined;
 
     const newPaymentEntry = {
       id: `pay-${Date.now()}`,
       date: paymentDate,
       amount: paymentAmount,
       accountId: paymentAccountId,
-      notes: paymentNotes.trim() || 'Pembayaran angsuran',
+      notes: paymentNotes.trim() || (isInst ? `Cicilan Bulan Ke-${nextMonthNum}` : 'Pembayaran angsuran'),
+      monthNumber: nextMonthNum,
     };
+
+    // Calculate next due date for installment if not paid yet
+    let newDueDate = activePaymentDebt.dueDate;
+    if (isInst && newStatus !== 'paid' && activePaymentDebt.dueDayOfMonth) {
+      const currentDue = activePaymentDebt.dueDate ? new Date(activePaymentDebt.dueDate) : new Date();
+      currentDue.setMonth(currentDue.getMonth() + 1);
+      currentDue.setDate(activePaymentDebt.dueDayOfMonth);
+      newDueDate = currentDue.toISOString().split('T')[0];
+    }
 
     const updatedDebt: DebtRecord = {
       ...activePaymentDebt,
       paidAmount: newPaidAmount,
       remainingAmount: newRemainingAmount,
+      paidMonths: isInst ? newPaidMonths : activePaymentDebt.paidMonths,
       status: newStatus,
+      dueDate: newDueDate,
       payments: [...(activePaymentDebt.payments || []), newPaymentEntry],
     };
 
     await onSaveDebt(updatedDebt);
 
-    // Optional: create financial transaction record linked to this payment
+    // Sync with financial transaction record linked to this payment
     if (syncWithTransaction && onAddTransaction && paymentAccountId) {
-      if (activePaymentDebt.type === 'payable') {
-        // Bayar Hutang -> Pengeluaran Kas/Bank
-        await onAddTransaction({
-          date: paymentDate,
-          title: `Bayar Hutang: ${activePaymentDebt.personName} (${activePaymentDebt.title})`,
-          amount: paymentAmount,
-          type: 'expense',
-          category: 'Tagihan & Utilitas',
-          subCategory: 'Pembayaran Hutang/Cicilan',
-          accountId: paymentAccountId,
-          notes: paymentNotes || `Pembayaran angsuran hutang kepada ${activePaymentDebt.personName}`,
-          source: 'manual',
-        });
-      } else {
+      if (activePaymentDebt.type === 'receivable') {
         // Terima Pelunasan Piutang -> Pemasukan Kas/Bank
         await onAddTransaction({
           date: paymentDate,
           title: `Pelunasan Piutang: ${activePaymentDebt.personName} (${activePaymentDebt.title})`,
           amount: paymentAmount,
           type: 'income',
-          category: 'Pendapatan Lain',
-          subCategory: 'Pelunasan Piutang',
+          category: 'Hadiah & Bonus',
           accountId: paymentAccountId,
           notes: paymentNotes || `Penerimaan uang piutang dari ${activePaymentDebt.personName}`,
+          source: 'manual',
+        });
+      } else {
+        // Bayar Hutang / Kredit Barang -> Pengeluaran Kas/Bank
+        const itemLabel = isInst
+          ? `Bayar Cicilan: ${activePaymentDebt.itemName || activePaymentDebt.title} (Bulan ${nextMonthNum || newPaidMonths}/${activePaymentDebt.tenorMonths || 12})`
+          : `Bayar Hutang: ${activePaymentDebt.personName} (${activePaymentDebt.title})`;
+
+        await onAddTransaction({
+          date: paymentDate,
+          title: itemLabel,
+          amount: paymentAmount,
+          type: 'expense',
+          category: isInst ? 'Tagihan & Utilitas' : 'Tagihan & Utilitas',
+          accountId: paymentAccountId,
+          notes: paymentNotes || (isInst ? `Angsuran kredit ${activePaymentDebt.providerName || activePaymentDebt.personName}` : `Pembayaran hutang kepada ${activePaymentDebt.personName}`),
           source: 'manual',
         });
       }
@@ -226,12 +302,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       cleanPhone = '62' + cleanPhone.slice(1);
     }
 
-    const formattedAmount = new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      maximumFractionDigits: 0,
-    }).format(debt.remainingAmount);
-
+    const formattedAmount = formatCurrency(debt.remainingAmount);
     const dueText = debt.dueDate
       ? `yang jatuh tempo pada tanggal ${new Date(debt.dueDate).toLocaleDateString('id-ID', {
           day: 'numeric',
@@ -252,7 +323,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       style: 'currency',
       currency: 'IDR',
       maximumFractionDigits: 0,
-    }).format(val);
+    }).format(val || 0);
   };
 
   const getDueStatusBadge = (debt: DebtRecord) => {
@@ -313,97 +384,157 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in select-none">
       {/* Top Header Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: Total Hutang (Kewajiban) */}
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm relative overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Total Kredit Barang & Cicilan */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 shadow-sm relative overflow-hidden transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Hutang Saya (Kewajiban)
+            <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
+              Kredit Barang Aktif
             </span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+              <ShoppingBag className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
+            {formatCurrency(summary.totalInstallmentRemaining)}
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2">
+            <span>Sudah dicicil: {formatCurrency(summary.totalInstallmentPaid)}</span>
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">{summary.activeInstallmentCount} Barang</span>
+          </div>
+        </div>
+
+        {/* Card 2: Total Hutang Pinjaman (Kewajiban) */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Pinjaman / Hutang Tunai
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-800 flex items-center justify-center text-rose-600 dark:text-rose-400">
               <ArrowUpRight className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight mt-2">
+          <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
             {formatCurrency(summary.totalPayable)}
           </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2">
             <span>Sudah dicicil: {formatCurrency(summary.totalPaidPayable)}</span>
-            <span className="font-semibold text-rose-600">Harus Dibayar</span>
+            <span className="font-semibold text-rose-600 dark:text-rose-400">Harus Dibayar</span>
           </div>
         </div>
 
-        {/* Card 2: Total Piutang (Hak Tagih) */}
-        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm relative overflow-hidden">
+        {/* Card 3: Total Piutang (Hak Tagih) */}
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Piutang Saya (Uang Dipinjamkan)
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Piutang (Uang Dipinjamkan)
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
               <ArrowDownLeft className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-slate-900 tracking-tight mt-2">
+          <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
             {formatCurrency(summary.totalReceivable)}
           </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-2">
             <span>Sudah diterima: {formatCurrency(summary.totalPaidReceivable)}</span>
-            <span className="font-semibold text-emerald-600">Akan Diterima</span>
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">Akan Diterima</span>
           </div>
         </div>
 
-        {/* Card 3: Posisi Bersih & Urgensi */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white shadow-md relative overflow-hidden flex flex-col justify-between">
+        {/* Card 4: Posisi Bersih & Urgensi */}
+        <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 dark:from-slate-800 dark:to-slate-900 text-white shadow-md relative overflow-hidden flex flex-col justify-between border border-slate-800 dark:border-slate-700">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">
-              Posisi Arus Kas Bersih
+            <span className="text-xs font-bold text-indigo-200 dark:text-indigo-300 uppercase tracking-wider">
+              Total Seluruh Kewajiban
             </span>
             <div className="w-8 h-8 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center text-indigo-300">
               <HandCoins className="w-4 h-4" />
             </div>
           </div>
-          <div className="my-2">
+          <div className="my-1.5">
             <div className="text-2xl font-black text-white tracking-tight">
-              {summary.netBalance >= 0 ? `+${formatCurrency(summary.netBalance)}` : formatCurrency(summary.netBalance)}
+              {formatCurrency(summary.totalAllLiabilities)}
             </div>
-            <div className="text-[11px] text-indigo-200/80 mt-0.5">
-              {summary.netBalance >= 0 ? 'Piutang lebih besar dari hutang' : 'Kewajiban hutang lebih besar'}
+            <div className="text-[11px] text-indigo-200/80 dark:text-indigo-300/80 mt-0.5 flex items-center gap-1">
+              <span>Posisi Bersih:</span>
+              <span className="font-bold">
+                {summary.netBalance >= 0 ? `+${formatCurrency(summary.netBalance)}` : formatCurrency(summary.netBalance)}
+              </span>
             </div>
           </div>
           {summary.urgentCount > 0 && (
             <div className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-1 rounded-lg flex items-center gap-1.5 w-fit">
               <AlertCircle className="w-3 h-3" />
-              <span>{summary.urgentCount} pinjaman mendekati jatuh tempo</span>
+              <span>{summary.urgentCount} cicilan jatuh tempo dekat</span>
             </div>
           )}
         </div>
       </div>
 
+      {/* Action Banner: Kalkulator Simulasi Kredit Barang */}
+      <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 dark:from-indigo-950 dark:via-slate-900 dark:to-slate-950 rounded-3xl p-5 sm:p-6 text-white shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-indigo-700/50 dark:border-slate-800">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-indigo-300 shrink-0 shadow-inner">
+            <Calculator className="w-6 h-6 text-indigo-200" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-base text-white tracking-tight">
+                Kalkulator & Simulasi Kredit Barang
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                Fitur Baru
+              </span>
+            </div>
+            <p className="text-xs text-indigo-200/80 mt-1 max-w-xl">
+              Hitung estimasi angsuran per bulan (DP, tenor, bunga flat/admin), cek total selisih bunga, serta pantau progres berapa bulan cicilan yang sudah lunas.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setIsCalculatorOpen(true)}
+          className="px-4 py-2.5 bg-white hover:bg-slate-100 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-indigo-900 dark:text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-2 shrink-0 cursor-pointer"
+        >
+          <Calculator className="w-4 h-4 text-indigo-600 dark:text-white" />
+          <span>Buka Kalkulator Kredit</span>
+        </button>
+      </div>
+
       {/* Control Bar: Filters, Search, and Add Button */}
-      <div className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row gap-3 items-center justify-between transition-colors">
         {/* Left Side: Tab Type Switch */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full lg:w-auto overflow-x-auto scrollbar-none">
           <button
             onClick={() => setActiveTab('all')}
-            className={`flex-1 md:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'all' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'all' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             Semua ({debts.length})
           </button>
           <button
+            onClick={() => setActiveTab('installment')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'installment' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Kredit Barang ({debts.filter((d) => d.type === 'installment' || d.isInstallment).length})</span>
+          </button>
+          <button
             onClick={() => setActiveTab('payable')}
-            className={`flex-1 md:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-              activeTab === 'payable' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+              activeTab === 'payable' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>Hutang ({debts.filter((d) => d.type === 'payable').length})</span>
+            <span>Hutang Tunai ({debts.filter((d) => d.type === 'payable').length})</span>
           </button>
           <button
             onClick={() => setActiveTab('receivable')}
-            className={`flex-1 md:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-              activeTab === 'receivable' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+              activeTab === 'receivable' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <ArrowDownLeft className="w-3.5 h-3.5" />
@@ -412,67 +543,83 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         </div>
 
         {/* Middle: Search & Filter */}
-        <div className="flex items-center gap-2 w-full md:w-auto flex-1 max-w-md">
+        <div className="flex items-center gap-2 w-full lg:w-auto flex-1 max-w-md">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari nama orang, keperluan, atau catatan..."
+              placeholder="Cari barang, lembaga (Kredivo/Spay), atau nama..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 cursor-pointer"
+            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
           >
             <option value="all">Semua Status</option>
             <option value="unpaid">Belum Lunas</option>
-            <option value="partial">Sebagian (Cicil)</option>
+            <option value="partial">Sedang Dicicil</option>
             <option value="paid">Sudah Lunas</option>
           </select>
         </div>
 
-        {/* Right Side: Add Button */}
-        <button
-          onClick={() => {
-            setEditingDebt(null);
-            setIsModalOpen(true);
-          }}
-          className="w-full md:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200 transition-all cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Tambah Hutang / Piutang</span>
-        </button>
-      </div>
-
-      {/* Debts List */}
-      {filteredDebts.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-slate-300">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3">
-            <HandCoins className="w-7 h-7" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900">Belum Ada Catatan Hutang / Piutang</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-            Mulai catat pinjaman kepada teman, cicilan bank, atau tagihan piutang Anda agar keuangan tetap rapi dan terkontrol.
-          </p>
+        {/* Right Side: Add Buttons */}
+        <div className="flex items-center gap-2 w-full lg:w-auto">
           <button
             onClick={() => {
               setEditingDebt(null);
               setIsModalOpen(true);
             }}
-            className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+            className="w-full lg:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200 dark:shadow-none transition-all cursor-pointer shrink-0"
           >
-            + Buat Catatan Baru
+            <Plus className="w-4 h-4" />
+            <span>+ Catat Kredit / Hutang</span>
           </button>
+        </div>
+      </div>
+
+      {/* Debts & Installments List */}
+      {filteredDebts.length === 0 ? (
+        <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-slate-300">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3">
+            <ShoppingBag className="w-7 h-7" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900">Belum Ada Catatan Kredit / Hutang</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+            Gunakan fitur kredit barang untuk memantau angsuran gadget, kendaraan, paylater, atau pinjaman tunai Anda.
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <button
+              onClick={() => setIsCalculatorOpen(true)}
+              className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+            >
+              🧮 Buka Simulasi Kredit
+            </button>
+            <button
+              onClick={() => {
+                setEditingDebt(null);
+                setIsModalOpen(true);
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+            >
+              + Buat Catatan Baru
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredDebts.map((debt) => {
+            const isInstallment = debt.type === 'installment' || debt.isInstallment;
             const isPayable = debt.type === 'payable';
+            const isReceivable = debt.type === 'receivable';
+
+            const tenor = debt.tenorMonths || 12;
+            const paidMonths = debt.paidMonths || 0;
+            const remainingMonths = Math.max(0, tenor - paidMonths);
             const progressPercent =
               debt.totalAmount > 0 ? Math.min(100, Math.round((debt.paidAmount / debt.totalAmount) * 100)) : 0;
             const isHistoryExpanded = expandedHistories[debt.id];
@@ -480,42 +627,60 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
             return (
               <div
                 key={debt.id}
-                className={`p-5 rounded-3xl bg-white border transition-all duration-200 shadow-xs flex flex-col justify-between ${
+                className={`p-5 rounded-3xl bg-white dark:bg-slate-900 border transition-all duration-200 shadow-xs flex flex-col justify-between ${
                   debt.status === 'paid'
-                    ? 'border-slate-200 bg-slate-50/50 opacity-90'
+                    ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 opacity-90'
+                    : isInstallment
+                    ? 'border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700'
                     : isPayable
-                    ? 'border-rose-100 hover:border-rose-300'
-                    : 'border-emerald-100 hover:border-emerald-300'
+                    ? 'border-rose-100 dark:border-rose-900/50 hover:border-rose-300 dark:hover:border-rose-700'
+                    : 'border-emerald-100 dark:border-emerald-900/50 hover:border-emerald-300 dark:hover:border-emerald-700'
                 }`}
               >
-                {/* Top Row: Type & Person */}
                 <div>
+                  {/* Top Row: Type, Provider & Due Status */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5">
                       <div
                         className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
-                          isPayable
-                            ? 'bg-rose-50 border-rose-200/60 text-rose-600'
-                            : 'bg-emerald-50 border-emerald-200/60 text-emerald-600'
+                          isInstallment
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200/60 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400'
+                            : isPayable
+                            ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/60 dark:border-rose-800 text-rose-600 dark:text-rose-400'
+                            : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/60 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
                         }`}
                       >
-                        {isPayable ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownLeft className="w-5 h-5" />}
+                        {isInstallment ? (
+                          <ShoppingBag className="w-5 h-5" />
+                        ) : isPayable ? (
+                          <ArrowUpRight className="w-5 h-5" />
+                        ) : (
+                          <ArrowDownLeft className="w-5 h-5" />
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
                           <span
                             className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                              isPayable ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                              isInstallment
+                                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                                : isPayable
+                                ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                             }`}
                           >
-                            {isPayable ? 'Hutang Saya' : 'Piutang Saya'}
+                            {isInstallment
+                              ? 'Kredit / Cicilan Barang'
+                              : isPayable
+                              ? 'Hutang Tunai'
+                              : 'Piutang Saya'}
                           </span>
                           {debt.category && (
-                            <span className="text-[11px] text-slate-500 font-medium">{debt.category}</span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{debt.category}</span>
                           )}
                         </div>
-                        <h4 className="text-sm font-bold text-slate-900 mt-0.5 tracking-tight">
-                          {debt.personName}
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 tracking-tight">
+                          {debt.personName || debt.providerName}
                         </h4>
                       </div>
                     </div>
@@ -523,42 +688,105 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                     <div className="flex items-center gap-1.5">{getDueStatusBadge(debt)}</div>
                   </div>
 
-                  {/* Purpose / Title */}
+                  {/* Title / Item Name */}
                   <div className="mt-3">
-                    <div className="text-xs font-semibold text-slate-800">{debt.title}</div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      {isInstallment && <PackageCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
+                      <span>{debt.itemName || debt.title}</span>
+                    </div>
                     {debt.notes && (
-                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5 italic">"{debt.notes}"</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5 italic">"{debt.notes}"</p>
                     )}
                   </div>
 
-                  {/* Financial Metrics */}
-                  <div className="mt-4 p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
+                  {/* SPECIAL SECTION: Item Installment Months Tracker */}
+                  {isInstallment && (
+                    <div className="mt-3.5 p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-indigo-950 dark:text-indigo-200">Status Cicilan:</span>
+                          <span className="font-black text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                            Bulan ke-{paidMonths} dari {tenor} Bulan
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300">
+                          {remainingMonths === 0 ? '🎉 Lunas' : `Sisa ${remainingMonths} Bulan`}
+                        </span>
+                      </div>
+
+                      {/* Visual Month Tracker Pills */}
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {Array.from({ length: tenor }).map((_, index) => {
+                          const monthIdx = index + 1;
+                          const isPaid = monthIdx <= paidMonths;
+                          const isCurrentNext = monthIdx === paidMonths + 1;
+
+                          return (
+                            <div
+                              key={monthIdx}
+                              title={`Bulan ${monthIdx}: ${isPaid ? 'Sudah Dibayar' : isCurrentNext ? 'Jatuh Tempo Berikutnya' : 'Belum Dibayar'}`}
+                              className={`h-6 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
+                                isPaid
+                                  ? 'bg-emerald-500 text-white shadow-2xs'
+                                  : isCurrentNext
+                                  ? 'bg-amber-400 text-amber-950 border border-amber-500 ring-2 ring-amber-300 animate-pulse'
+                                  : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              {isPaid && <Check className="w-2.5 h-2.5" />}
+                              <span>Bln {monthIdx}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {debt.monthlyInstallment && debt.monthlyInstallment > 0 && (
+                        <div className="mt-2.5 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/60 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
+                          <span>
+                            Angsuran: <strong className="text-slate-900 dark:text-white">{formatCurrency(debt.monthlyInstallment)}</strong> / bln
+                          </span>
+                          {debt.dueDayOfMonth && (
+                            <span className="text-slate-500 dark:text-slate-400">
+                              Tiap tanggal <strong>{debt.dueDayOfMonth}</strong>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Financial Metrics Box */}
+                  <div className="mt-3.5 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80">
                     <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-slate-500">Sisa Kewajiban:</span>
+                      <span className="text-slate-500 dark:text-slate-400">Sisa Kewajiban:</span>
                       <span
                         className={`font-black text-sm ${
                           debt.status === 'paid'
-                            ? 'text-slate-400 line-through'
+                            ? 'text-slate-400 dark:text-slate-500 line-through'
+                            : isInstallment
+                            ? 'text-indigo-700 dark:text-indigo-400'
                             : isPayable
-                            ? 'text-rose-600'
-                            : 'text-emerald-600'
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-emerald-600 dark:text-emerald-400'
                         }`}
                       >
                         {formatCurrency(debt.remainingAmount)}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                       <span>Total: {formatCurrency(debt.totalAmount)}</span>
-                      <span>Sudah bayar: {formatCurrency(debt.paidAmount)} ({progressPercent}%)</span>
+                      <span>Sudah Bayar: {formatCurrency(debt.paidAmount)}</span>
                     </div>
 
                     {/* Progress Bar */}
-                    <div className="w-full h-2 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                    <div className="mt-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${
+                        className={`h-full rounded-full transition-all duration-500 ${
                           debt.status === 'paid'
                             ? 'bg-emerald-500'
+                            : isInstallment
+                            ? 'bg-indigo-600 dark:bg-indigo-500'
                             : isPayable
                             ? 'bg-rose-500'
                             : 'bg-emerald-500'
@@ -566,124 +794,113 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                         style={{ width: `${progressPercent}%` }}
                       />
                     </div>
-                  </div>
 
-                  {/* Due Date & Contacts info */}
-                  <div className="mt-3 flex flex-wrap items-center justify-between text-[11px] text-slate-500 gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>
-                        Jatuh Tempo:{' '}
-                        {debt.dueDate
-                          ? new Date(debt.dueDate).toLocaleDateString('id-ID', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                            })
-                          : 'Fleksibel'}
-                      </span>
+                    <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-semibold">
+                      <span>Mulai: {debt.startDate}</span>
+                      <span>{progressPercent}% Terbayar</span>
                     </div>
-
-                    {debt.contactPhone && (
-                      <div className="flex items-center gap-1 text-slate-600 font-medium">
-                        <Phone className="w-3 h-3 text-slate-400" />
-                        <span>{debt.contactPhone}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                {/* Bottom Actions */}
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
-                  <div className="flex items-center gap-2">
-                    {/* Pay / Receive Installment Button */}
+                {/* Actions & Payment Button */}
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
                     {debt.status !== 'paid' ? (
                       <button
                         onClick={() => handleOpenPaymentModal(debt)}
-                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold text-white transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 ${
-                          isPayable
-                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200'
-                            : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer text-white ${
+                          isInstallment
+                            ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 dark:shadow-none'
+                            : isPayable
+                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100 dark:shadow-none'
+                            : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100 dark:shadow-none'
                         }`}
                       >
-                        <DollarSign className="w-3.5 h-3.5" />
-                        <span>{isPayable ? 'Bayar / Cicil Hutang' : 'Terima Pembayaran'}</span>
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>
+                          {isInstallment
+                            ? `Bayar Cicilan Bln ke-${paidMonths + 1}`
+                            : isPayable
+                            ? 'Bayar Angsuran'
+                            : 'Terima Pembayaran'}
+                        </span>
                       </button>
                     ) : (
-                      <div className="flex-1 py-2 px-3 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 flex items-center justify-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Pinjaman Telah Lunas</span>
+                      <div className="flex-1 py-2 px-3 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Kredit Telah Lunas Penuh</span>
                       </div>
                     )}
 
-                    {/* WhatsApp Reminder Button (for Receivable) */}
-                    {!isPayable && debt.status !== 'paid' && debt.contactPhone && (
+                    {/* WhatsApp Reminder (Piutang only) */}
+                    {isReceivable && debt.status !== 'paid' && debt.contactPhone && (
                       <button
                         onClick={() => handleOpenWhatsAppReminder(debt)}
-                        title="Kirim Pengingat WhatsApp"
-                        className="py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-95"
+                        title="Kirim pengingat tagihan via WhatsApp"
+                        className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer"
                       >
-                        <MessageCircle className="w-4 h-4 text-emerald-600" />
-                        <span className="hidden sm:inline">Kirim WA</span>
+                        <Phone className="w-3.5 h-3.5" />
                       </button>
                     )}
 
-                    {/* Edit Button */}
+                    {/* Edit & Delete Buttons */}
                     <button
                       onClick={() => {
                         setEditingDebt(debt);
                         setIsModalOpen(true);
                       }}
-                      title="Edit Data Pinjaman"
-                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+                      title="Edit data cicilan"
+                      className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* Delete Button */}
                     <button
                       onClick={() => {
-                        if (confirm(`Hapus catatan ${isPayable ? 'hutang' : 'piutang'} "${debt.title}"?`)) {
+                        if (confirm(`Yakin ingin menghapus catatan "${debt.title}"?`)) {
                           onDeleteDebt(debt.id);
                         }
                       }}
-                      title="Hapus Catatan"
-                      className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
+                      title="Hapus catatan"
+                      className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
-                  {/* Toggle Payment History Accordion */}
+                  {/* Payment History Accordion */}
                   {debt.payments && debt.payments.length > 0 && (
                     <div>
                       <button
                         onClick={() => toggleHistory(debt.id)}
-                        className="w-full text-[11px] font-semibold text-slate-500 hover:text-indigo-600 flex items-center justify-between py-1 px-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                        className="w-full text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-between py-1 px-1 cursor-pointer transition-colors"
                       >
-                        <div className="flex items-center gap-1.5">
-                          <History className="w-3.5 h-3.5 text-indigo-500" />
-                          <span>Riwayat Pembayaran ({debt.payments.length} kali)</span>
-                        </div>
-                        {isHistoryExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        <span className="flex items-center gap-1">
+                          <History className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                          Riwayat Pembayaran ({debt.payments.length} transaksi)
+                        </span>
+                        <span>{isHistoryExpanded ? 'Sembunyikan ▲' : 'Lihat Detail ▼'}</span>
                       </button>
 
                       {isHistoryExpanded && (
-                        <div className="mt-2 space-y-1.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[11px]">
-                          {debt.payments.map((p, idx) => (
+                        <div className="mt-1.5 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                          {debt.payments.map((pay) => (
                             <div
-                              key={p.id || idx}
-                              className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0"
+                              key={pay.id}
+                              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-[11px] flex items-center justify-between"
                             >
                               <div>
-                                <span className="font-semibold text-slate-800">{formatCurrency(p.amount)}</span>
-                                <span className="text-slate-400 mx-1.5">•</span>
-                                <span className="text-slate-500">{p.date}</span>
-                                {p.notes && <span className="text-slate-400 block text-[10px] italic">{p.notes}</span>}
+                                <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                                  {pay.monthNumber && (
+                                    <span className="px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[9px] font-extrabold">
+                                      Bulan {pay.monthNumber}
+                                    </span>
+                                  )}
+                                  <span>{formatCurrency(pay.amount)}</span>
+                                </div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-500">{pay.notes || pay.date}</div>
                               </div>
-                              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
-                                Sukses
-                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{pay.date}</span>
                             </div>
                           ))}
                         </div>
@@ -697,115 +914,102 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         </div>
       )}
 
-      {/* Modal 1: Tambah / Edit Hutang & Piutang */}
-      {isModalOpen && (
-        <DebtFormModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setEditingDebt(null);
-          }}
-          onSave={async (savedDebt) => {
-            await onSaveDebt(savedDebt);
-            setIsModalOpen(false);
-            setEditingDebt(null);
-          }}
-          editingDebt={editingDebt}
-          accounts={accounts}
-          onAddTransaction={onAddTransaction}
-        />
-      )}
-
-      {/* Modal 2: Catat Pembayaran / Cicilan */}
+      {/* MODAL: Payment / Angsuran Confirmation */}
       {isPaymentModalOpen && activePaymentDebt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in select-none">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                    activePaymentDebt.type === 'payable' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
-                  }`}
-                >
-                  <DollarSign className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    {activePaymentDebt.type === 'payable' ? 'Bayar Angsuran Hutang' : 'Terima Pembayaran Piutang'}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">Kepada / Dari: {activePaymentDebt.personName}</p>
-                </div>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 transition-colors">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                  {activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment
+                    ? 'Bayar Angsuran Kredit Barang'
+                    : activePaymentDebt.type === 'payable'
+                    ? 'Catat Pembayaran Hutang'
+                    : 'Catat Penerimaan Piutang'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {activePaymentDebt.itemName || activePaymentDebt.title} • {activePaymentDebt.personName}
+                </p>
               </div>
               <button
                 onClick={() => setIsPaymentModalOpen(false)}
-                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1 text-xs">
-              <div className="flex justify-between text-slate-500">
-                <span>Total Pinjaman:</span>
-                <span className="font-semibold text-slate-800">{formatCurrency(activePaymentDebt.totalAmount)}</span>
+            {/* Quick Balance Status */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl text-xs space-y-1.5">
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                <span>Total Kewajiban:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(activePaymentDebt.totalAmount)}</span>
               </div>
-              <div className="flex justify-between text-slate-500">
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>Sisa Belum Dibayar:</span>
-                <span className="font-bold text-rose-600">{formatCurrency(activePaymentDebt.remainingAmount)}</span>
+                <span className="font-bold text-rose-600 dark:text-rose-400">{formatCurrency(activePaymentDebt.remainingAmount)}</span>
               </div>
+              {(activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment) && (
+                <div className="flex justify-between text-indigo-700 dark:text-indigo-400 font-bold pt-1 border-t border-slate-200 dark:border-slate-700">
+                  <span>Progres Bulan:</span>
+                  <span>
+                    Bulan ke-{(activePaymentDebt.paidMonths || 0) + 1} dari {activePaymentDebt.tenorMonths || 12} Bulan
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Nominal Pembayaran (Rp)</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nominal Pembayaran (Rp)</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
                   <input
                     type="number"
                     value={paymentAmount || ''}
                     onChange={(e) => setPaymentAmount(Math.max(0, Number(e.target.value)))}
-                    className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm text-slate-900"
-                    placeholder="Contoh: 500000"
+                    className="w-full pl-10 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm text-slate-900 dark:text-white"
+                    placeholder="Contoh: 1500000"
                   />
                 </div>
-                <div className="flex gap-1.5 mt-1.5">
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {activePaymentDebt.monthlyInstallment && activePaymentDebt.monthlyInstallment > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentAmount(activePaymentDebt.monthlyInstallment || 0)}
+                      className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold transition-colors cursor-pointer"
+                    >
+                      1 Bulan Angsuran ({formatCurrency(activePaymentDebt.monthlyInstallment)})
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPaymentAmount(activePaymentDebt.remainingAmount)}
-                    className="px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold transition-colors cursor-pointer"
+                    className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold transition-colors cursor-pointer"
                   >
                     Lunaskan Semua ({formatCurrency(activePaymentDebt.remainingAmount)})
                   </button>
-                  {activePaymentDebt.remainingAmount > 1000000 && (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentAmount(Math.round(activePaymentDebt.remainingAmount / 2))}
-                      className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-medium transition-colors cursor-pointer"
-                    >
-                      50% ({formatCurrency(Math.round(activePaymentDebt.remainingAmount / 2))})
-                    </button>
-                  )}
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Tanggal Pembayaran</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tanggal Pembayaran</label>
                 <input
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {activePaymentDebt.type === 'payable' ? 'Rekening Sumber Dana' : 'Rekening Penampung'}
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  {activePaymentDebt.type === 'receivable' ? 'Rekening Penampung' : 'Rekening Sumber Dana'}
                 </label>
                 <select
                   value={paymentAccountId}
                   onChange={(e) => setPaymentAccountId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 dark:text-white cursor-pointer"
                 >
                   {accounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
@@ -816,23 +1020,23 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Catatan Tambahan</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Catatan Tambahan</label>
                 <input
                   type="text"
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Contoh: Transfer via Livin Mandiri / Tunai"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  placeholder="Contoh: Autodebet m-BCA / Transfer manual"
                 />
               </div>
 
-              <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-2xl flex items-center justify-between">
+              <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl flex items-center justify-between">
                 <div className="text-[11px]">
-                  <span className="font-bold text-indigo-950 block">Otomatis Sinkron ke Catatan Transaksi</span>
-                  <span className="text-indigo-700">
-                    {activePaymentDebt.type === 'payable'
-                      ? 'Catat sebagai transaksi pengeluaran & potong saldo rekening'
-                      : 'Catat sebagai transaksi pemasukan & tambah saldo rekening'}
+                  <span className="font-bold text-indigo-950 dark:text-indigo-200 block">Otomatis Sinkron ke Catatan Transaksi</span>
+                  <span className="text-indigo-700 dark:text-indigo-400">
+                    {activePaymentDebt.type === 'receivable'
+                      ? 'Catat transaksi pemasukan & tambah saldo rekening'
+                      : 'Catat transaksi pengeluaran & potong saldo rekening'}
                   </span>
                 </div>
                 <input
@@ -844,11 +1048,11 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-slate-100">
+            <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsPaymentModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
               >
                 Batal
               </button>
@@ -856,7 +1060,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 type="button"
                 onClick={handleSavePayment}
                 disabled={paymentAmount <= 0}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-200 transition-all cursor-pointer disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-200 dark:shadow-none transition-all cursor-pointer disabled:opacity-50"
               >
                 Konfirmasi Pembayaran
               </button>
@@ -864,10 +1068,393 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL: Full Form Modal (Tambah/Edit Kredit & Hutang) */}
+      <DebtFormModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingDebt(null);
+        }}
+        onSave={onSaveDebt}
+        editingDebt={editingDebt}
+        accounts={accounts}
+        onAddTransaction={onAddTransaction}
+      />
+
+      {/* MODAL: Kalkulator Simulasi Kredit Barang Interaktif */}
+      <InstallmentCalculatorModal
+        isOpen={isCalculatorOpen}
+        onClose={() => setIsCalculatorOpen(false)}
+        onSaveInstallment={onSaveDebt}
+        accounts={accounts}
+      />
     </div>
   );
 };
 
+/* =========================================================================
+   KOMPONEN MODAL: KALKULATOR SIMULASI KREDIT BARANG INTERAKTIF
+   ========================================================================= */
+interface InstallmentCalculatorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaveInstallment: (debt: DebtRecord) => Promise<void>;
+  accounts: Account[];
+}
+
+const InstallmentCalculatorModal: React.FC<InstallmentCalculatorModalProps> = ({
+  isOpen,
+  onClose,
+  onSaveInstallment,
+  accounts,
+}) => {
+  const [itemName, setItemName] = useState('iPhone 15 Pro 256GB');
+  const [providerName, setProviderName] = useState('SpayLater (Shopee)');
+  const [cashPrice, setCashPrice] = useState<number>(20999000);
+  const [downPayment, setDownPayment] = useState<number>(2999000);
+  const [tenorMonths, setTenorMonths] = useState<number>(12);
+  const [interestRatePercent, setInterestRatePercent] = useState<number>(1.2); // per bulan
+  const [adminFeeMonthly, setAdminFeeMonthly] = useState<number>(25000);
+  const [paidMonthsInitial, setPaidMonthsInitial] = useState<number>(0);
+  const [dueDay, setDueDay] = useState<number>(5);
+  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  if (!isOpen) return null;
+
+  // Calculation Math
+  const principalLoan = Math.max(0, cashPrice - downPayment);
+  const monthlyPrincipal = tenorMonths > 0 ? principalLoan / tenorMonths : 0;
+  const monthlyInterest = principalLoan * (interestRatePercent / 100);
+  const totalMonthlyInstallment = Math.round(monthlyPrincipal + monthlyInterest + adminFeeMonthly);
+  const totalLoanInterest = Math.round(monthlyInterest * tenorMonths);
+  const totalAdminFee = adminFeeMonthly * tenorMonths;
+  const totalRepaymentAmount = totalMonthlyInstallment * tenorMonths;
+  const totalCost = downPayment + totalRepaymentAmount;
+  const creditDifference = totalCost - cashPrice;
+
+  const currentPaidAmount = totalMonthlyInstallment * paidMonthsInitial;
+  const currentRemainingAmount = Math.max(0, totalRepaymentAmount - currentPaidAmount);
+  const remainingMonths = Math.max(0, tenorMonths - paidMonthsInitial);
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      maximumFractionDigits: 0,
+    }).format(val || 0);
+  };
+
+  const handleSaveToDebtList = async () => {
+    if (!itemName.trim() || cashPrice <= 0 || tenorMonths <= 0) {
+      alert('Mohon lengkapi nama barang, harga, dan tenor cicilan.');
+      return;
+    }
+
+    const nextDueDate = new Date(startDate);
+    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+    nextDueDate.setDate(dueDay);
+
+    const newRecord: DebtRecord = {
+      id: `debt-inst-${Date.now()}`,
+      type: 'installment',
+      isInstallment: true,
+      itemName: itemName.trim(),
+      providerName: providerName.trim() || 'Cicilan Toko/Lembaga',
+      personName: providerName.trim() || 'Cicilan Toko/Lembaga',
+      title: `Kredit ${itemName.trim()}`,
+      originalPrice: cashPrice,
+      downPayment: downPayment,
+      tenorMonths: tenorMonths,
+      paidMonths: paidMonthsInitial,
+      monthlyInstallment: totalMonthlyInstallment,
+      interestRatePercent: interestRatePercent,
+      adminFee: adminFeeMonthly,
+      dueDayOfMonth: dueDay,
+      totalAmount: totalRepaymentAmount,
+      paidAmount: currentPaidAmount,
+      remainingAmount: currentRemainingAmount,
+      startDate: startDate,
+      dueDate: nextDueDate.toISOString().split('T')[0],
+      status: currentRemainingAmount === 0 ? 'paid' : paidMonthsInitial > 0 ? 'partial' : 'unpaid',
+      category: 'Kredit Gadget & Elektronik',
+      notes: `Cicilan ${itemName} via ${providerName} (Tenor ${tenorMonths} Bulan @ ${formatCurrency(totalMonthlyInstallment)}/bln). Bunga ${interestRatePercent}%/bln.`,
+      payments: paidMonthsInitial > 0
+        ? Array.from({ length: paidMonthsInitial }).map((_, idx) => ({
+            id: `pay-init-${idx + 1}`,
+            date: startDate,
+            amount: totalMonthlyInstallment,
+            accountId: accounts[0]?.id || 'acc-cash',
+            notes: `Cicilan Bulan Ke-${idx + 1}`,
+            monthNumber: idx + 1,
+          }))
+        : [],
+      createdAt: new Date().toISOString(),
+    };
+
+    await onSaveInstallment(newRecord);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 border border-slate-100 dark:border-slate-800 my-8 animate-in fade-in zoom-in-95 transition-colors">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+              <Calculator className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">Kalkulator Simulasi Kredit Barang</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Hitung angsuran bulanan, bunga, dan pantau progres berapa bulan cicilan sudah dibayar.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Form Inputs Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* Item Name */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Barang / Produk</label>
+            <input
+              type="text"
+              value={itemName}
+              onChange={(e) => setItemName(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 dark:text-white"
+              placeholder="Contoh: iPhone 15, Honda Vario, Laptop ASUS"
+            />
+          </div>
+
+          {/* Provider / Merchant */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Penyedia Cicilan / PayLater</label>
+            <div className="space-y-1">
+              <input
+                type="text"
+                value={providerName}
+                onChange={(e) => setProviderName(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                placeholder="SpayLater, Kredivo, BCA Cicilan, Akulaku"
+              />
+              <div className="flex flex-wrap gap-1">
+                {['SpayLater', 'Kredivo', 'Akulaku', 'BCA Cicilan 0%', 'Home Credit', 'FIF'].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setProviderName(p)}
+                    className="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-md transition-colors cursor-pointer"
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Cash Price */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Harga Asli Barang (Cash Price)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
+              <input
+                type="number"
+                value={cashPrice || ''}
+                onChange={(e) => setCashPrice(Math.max(0, Number(e.target.value)))}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white"
+                placeholder="20999000"
+              />
+            </div>
+          </div>
+
+          {/* Down Payment (DP) */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Uang Muka / DP (Jika Ada)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
+              <input
+                type="number"
+                value={downPayment || ''}
+                onChange={(e) => setDownPayment(Math.max(0, Number(e.target.value)))}
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white"
+                placeholder="0 jika tanpa DP"
+              />
+            </div>
+          </div>
+
+          {/* Tenor (Durasi Bulan) */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tenor Cicilan (Durasi Bulan)</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {[3, 6, 9, 12, 18, 24, 36].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTenorMonths(t)}
+                  className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                    tenorMonths === t
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {t} Bln
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Suku Bunga & Biaya Admin */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Bunga (%/bln)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={interestRatePercent}
+                onChange={(e) => setInterestRatePercent(Math.max(0, Number(e.target.value)))}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white"
+                placeholder="1.2 (0 jika 0%)"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Admin / Bln (Rp)</label>
+              <input
+                type="number"
+                value={adminFeeMonthly || ''}
+                onChange={(e) => setAdminFeeMonthly(Math.max(0, Number(e.target.value)))}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white"
+                placeholder="25000"
+              />
+            </div>
+          </div>
+
+          {/* Already Paid Months (Tracking Bulan yang Sudah Dibayar) */}
+          <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl">
+            <label className="block font-bold text-emerald-950 dark:text-emerald-300 mb-1">
+              Sudah Berapa Bulan yang Sudah Dibayar?
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max={tenorMonths}
+                value={paidMonthsInitial}
+                onChange={(e) => setPaidMonthsInitial(Math.min(tenorMonths, Math.max(0, Number(e.target.value))))}
+                className="w-20 px-3 py-1.5 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-black text-center text-sm text-emerald-800 dark:text-emerald-300"
+              />
+              <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs">
+                dari {tenorMonths} Bulan (Sisa {remainingMonths} Bulan Lagi)
+              </span>
+            </div>
+          </div>
+
+          {/* Due Day & Start Date */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tgl Jatuh Tempo Tiap Bln</label>
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={dueDay}
+                onChange={(e) => setDueDay(Math.min(31, Math.max(1, Number(e.target.value))))}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white"
+                placeholder="5"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tanggal Mulai Cicil</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 dark:text-white"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* RESULTS CALCULATION BOX */}
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-900 to-slate-900 dark:from-slate-800 dark:to-slate-950 text-white space-y-3 shadow-md border border-indigo-700/50 dark:border-slate-700">
+          <div className="flex items-center justify-between border-b border-indigo-700/60 dark:border-slate-700 pb-2">
+            <span className="text-xs font-bold text-indigo-200 uppercase tracking-wider">
+              Hasil Simulasi Angsuran
+            </span>
+            <span className="text-xs font-black bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2.5 py-0.5 rounded-full">
+              Tenor {tenorMonths} Bulan
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-indigo-200/70 block text-[11px]">Angsuran per Bulan:</span>
+              <span className="text-2xl font-black text-white tracking-tight">
+                {formatCurrency(totalMonthlyInstallment)}
+                <span className="text-xs font-normal text-indigo-300"> / bulan</span>
+              </span>
+            </div>
+            <div>
+              <span className="text-indigo-200/70 block text-[11px]">Status Pembayaran Saat Ini:</span>
+              <span className="text-base font-bold text-emerald-400">
+                {paidMonthsInitial} / {tenorMonths} Bulan Terbayar ({formatCurrency(currentPaidAmount)})
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-indigo-700/60 dark:border-slate-700 text-[11px]">
+            <div>
+              <span className="text-indigo-300">Pokok Hutang:</span>
+              <div className="font-bold text-white">{formatCurrency(principalLoan)}</div>
+            </div>
+            <div>
+              <span className="text-indigo-300">Total Bunga:</span>
+              <div className="font-bold text-amber-300">{formatCurrency(totalLoanInterest)}</div>
+            </div>
+            <div>
+              <span className="text-indigo-300">Total Biaya Kredit:</span>
+              <div className="font-bold text-white">{formatCurrency(totalCost)}</div>
+            </div>
+            <div>
+              <span className="text-indigo-300">Selisih vs Cash:</span>
+              <div className="font-bold text-rose-300">+{formatCurrency(creditDifference)}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+          >
+            Tutup
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveToDebtList}
+            className="flex-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 dark:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <Check className="w-4 h-4" />
+            <span>Simpan ke Daftar Cicilan Saya</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* =========================================================================
+   KOMPONEN FORM MODAL (TAMBAH / EDIT KREDIT & HUTANG PIUTANG LENGKAP)
+   ========================================================================= */
 interface DebtFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -885,40 +1472,77 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
   accounts,
   onAddTransaction,
 }) => {
-  const [type, setType] = useState<DebtType>(editingDebt?.type || 'payable');
+  const [type, setType] = useState<DebtType>(editingDebt?.type || 'installment');
+  const [itemName, setItemName] = useState(editingDebt?.itemName || '');
+  const [providerName, setProviderName] = useState(editingDebt?.providerName || '');
   const [personName, setPersonName] = useState(editingDebt?.personName || '');
   const [contactPhone, setContactPhone] = useState(editingDebt?.contactPhone || '');
   const [title, setTitle] = useState(editingDebt?.title || '');
   const [totalAmount, setTotalAmount] = useState<number>(editingDebt?.totalAmount || 0);
   const [paidAmount, setPaidAmount] = useState<number>(editingDebt?.paidAmount || 0);
+  const [tenorMonths, setTenorMonths] = useState<number>(editingDebt?.tenorMonths || 12);
+  const [paidMonths, setPaidMonths] = useState<number>(editingDebt?.paidMonths || 0);
+  const [monthlyInstallment, setMonthlyInstallment] = useState<number>(editingDebt?.monthlyInstallment || 0);
+  const [dueDayOfMonth, setDueDayOfMonth] = useState<number>(editingDebt?.dueDayOfMonth || 5);
   const [startDate, setStartDate] = useState(editingDebt?.startDate || new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState(editingDebt?.dueDate || '');
-  const [category, setCategory] = useState(editingDebt?.category || (type === 'payable' ? 'Cicilan Bank' : 'Pinjaman Teman'));
+  const [category, setCategory] = useState(
+    editingDebt?.category ||
+      (type === 'installment'
+        ? 'Kredit Gadget & Elektronik'
+        : type === 'payable'
+        ? 'Cicilan Bank'
+        : 'Pinjaman Teman')
+  );
   const [notes, setNotes] = useState(editingDebt?.notes || '');
   const [recordInitialTransaction, setRecordInitialTransaction] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || '');
+
+  // Auto calculate remaining based on paid months or paid amount
+  const handleTenorOrMonthsChange = (newTenor: number, newPaidMonths: number, monthly: number) => {
+    setTenorMonths(newTenor);
+    setPaidMonths(newPaidMonths);
+    if (monthly > 0) {
+      const calcTotal = monthly * newTenor;
+      const calcPaid = monthly * newPaidMonths;
+      setTotalAmount(calcTotal);
+      setPaidAmount(calcPaid);
+    }
+  };
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!personName.trim() || !title.trim() || totalAmount <= 0) {
-      alert('Harap lengkapi nama pihak, keperluan, dan nominal pinjaman.');
+    const effectiveTitle = title.trim() || itemName.trim() || 'Kredit Barang';
+    const effectivePerson = personName.trim() || providerName.trim() || 'Pihak Terkait';
+
+    if (totalAmount <= 0) {
+      alert('Harap masukkan nominal total kewajiban cicilan.');
       return;
     }
 
     const calculatedRemaining = Math.max(0, totalAmount - paidAmount);
     const calculatedStatus: DebtStatus = calculatedRemaining === 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid';
 
+    const isInst = type === 'installment';
+
     const debtData: DebtRecord = {
       id: editingDebt?.id || `debt-${Date.now()}`,
       type,
-      personName: personName.trim(),
+      isInstallment: isInst,
+      itemName: itemName.trim() || undefined,
+      providerName: providerName.trim() || undefined,
+      personName: effectivePerson,
       contactPhone: contactPhone.trim() || undefined,
-      title: title.trim(),
+      title: effectiveTitle,
       totalAmount,
       paidAmount,
       remainingAmount: calculatedRemaining,
+      tenorMonths: isInst ? tenorMonths : undefined,
+      paidMonths: isInst ? paidMonths : undefined,
+      monthlyInstallment: isInst ? (monthlyInstallment || Math.round(totalAmount / (tenorMonths || 12))) : undefined,
+      dueDayOfMonth: isInst ? dueDayOfMonth : undefined,
       startDate,
       dueDate: dueDate || undefined,
       status: calculatedStatus,
@@ -936,305 +1560,356 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
         // Saya meminjam uang -> Dana masuk ke rekening saya (Income / Pinjaman)
         await onAddTransaction({
           date: startDate,
-          title: `Pencairan Pinjaman: ${personName} (${title})`,
+          title: `Pencairan Pinjaman: ${effectivePerson} (${effectiveTitle})`,
           amount: totalAmount,
           type: 'income',
-          category: 'Pendapatan Lain',
-          subCategory: 'Pencairan Pinjaman/Hutang',
+          category: 'Hadiah & Bonus',
           accountId: selectedAccountId,
-          notes: `Dana pinjaman dari ${personName}`,
+          notes: `Dana pinjaman dari ${effectivePerson}`,
           source: 'manual',
         });
-      } else {
+      } else if (type === 'receivable') {
         // Saya meminjamkan uang ke orang -> Saldo rekening saya keluar (Expense / Talangan)
         await onAddTransaction({
           date: startDate,
-          title: `Pemberian Pinjaman/Talangan: ${personName} (${title})`,
+          title: `Talangan / Pinjaman ke: ${effectivePerson} (${effectiveTitle})`,
           amount: totalAmount,
           type: 'expense',
-          category: 'Pengeluaran Lain',
-          subCategory: 'Pemberian Pinjaman/Piutang',
+          category: 'Tagihan & Utilitas',
           accountId: selectedAccountId,
-          notes: `Meminjamkan uang kepada ${personName}`,
+          notes: `Pinjaman dana ke ${effectivePerson}`,
           source: 'manual',
         });
       }
     }
+
+    onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in select-none">
-      <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-slate-100 flex flex-col gap-4">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-                type === 'payable' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
-              }`}
-            >
-              <HandCoins className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                {editingDebt ? 'Edit Data Pinjaman' : 'Catat Hutang / Piutang Baru'}
-              </h3>
-              <p className="text-xs text-slate-500">Kelola kewajiban dan tagihan keuangan Anda</p>
-            </div>
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-100 dark:border-slate-800 my-8 animate-in fade-in zoom-in-95 transition-colors">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div>
+            <h3 className="font-bold text-base text-slate-900 dark:text-white">
+              {editingDebt ? 'Edit Catatan Kewajiban / Kredit' : 'Tambah Catatan Baru'}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Pilih tipe kredit barang, hutang pinjaman, atau piutang.
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          {/* Type Selector (Payable vs Receivable) */}
-          <div>
-            <label className="block font-bold text-slate-700 mb-1.5">Jenis Catatan Pinjaman</label>
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          {/* Type Selector (3 options) */}
+          <div className="grid grid-cols-3 gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => {
+                setType('installment');
+                setCategory('Kredit Gadget & Elektronik');
+              }}
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                type === 'installment'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Kredit Barang</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setType('payable');
+                setCategory('Cicilan Bank');
+              }}
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                type === 'payable'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <ArrowUpRight className="w-3.5 h-3.5" />
+              <span>Hutang Tunai</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setType('receivable');
+                setCategory('Pinjaman Teman');
+              }}
+              className={`py-2 px-2 rounded-xl font-bold transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                type === 'receivable'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <ArrowDownLeft className="w-3.5 h-3.5" />
+              <span>Piutang Saya</span>
+            </button>
+          </div>
+
+          {/* Conditional Fields based on Type */}
+          {type === 'installment' ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Barang / Produk</label>
+                  <input
+                    type="text"
+                    required
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 dark:text-white"
+                    placeholder="Contoh: iPhone 15 Pro, Honda Beat"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Lembaga / PayLater</label>
+                  <input
+                    type="text"
+                    value={providerName}
+                    onChange={(e) => {
+                      setProviderName(e.target.value);
+                      setPersonName(e.target.value);
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                    placeholder="SpayLater, Kredivo, BCA"
+                  />
+                </div>
+              </div>
+
+              {/* Installment Months Math */}
+              <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl space-y-2.5">
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block font-bold text-indigo-950 dark:text-indigo-200 mb-1">Tenor (Bulan)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={tenorMonths}
+                      onChange={(e) =>
+                        handleTenorOrMonthsChange(
+                          Number(e.target.value),
+                          paidMonths,
+                          monthlyInstallment
+                        )
+                      }
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-emerald-900 dark:text-emerald-300 mb-1">Sudah Dibayar</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={tenorMonths}
+                      value={paidMonths}
+                      onChange={(e) =>
+                        handleTenorOrMonthsChange(
+                          tenorMonths,
+                          Number(e.target.value),
+                          monthlyInstallment
+                        )
+                      }
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-800 dark:text-emerald-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-indigo-950 dark:text-indigo-200 mb-1">Cicilan / Bulan</label>
+                    <input
+                      type="number"
+                      value={monthlyInstallment || ''}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setMonthlyInstallment(val);
+                        handleTenorOrMonthsChange(tenorMonths, paidMonths, val);
+                      }}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-indigo-700 dark:text-indigo-400"
+                      placeholder="1680000"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-indigo-900 dark:text-indigo-300 flex justify-between font-semibold">
+                  <span>
+                    Status: <strong>Bulan ke-{paidMonths} dari {tenorMonths}</strong>
+                  </span>
+                  <span>
+                    Sisa: <strong>{Math.max(0, tenorMonths - paidMonths)} Bulan Lagi</strong>
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setType('payable');
-                  if (!editingDebt) setCategory('Cicilan Bank');
-                }}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
-                  type === 'payable'
-                    ? 'border-rose-500 bg-rose-50/50 text-rose-900 ring-2 ring-rose-500/20'
-                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                  <ArrowUpRight className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-xs">Hutang Saya</div>
-                  <div className="text-[10px] text-slate-500">Kewajiban harus saya bayar</div>
-                </div>
-              </button>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  {type === 'payable' ? 'Pemberi Pinjaman / Bank' : 'Nama Peminjam'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={personName}
+                  onChange={(e) => setPersonName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-900 dark:text-white"
+                  placeholder={type === 'payable' ? 'Contoh: Bank BCA / KTA' : 'Contoh: Budi Santoso'}
+                />
+              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setType('receivable');
-                  if (!editingDebt) setCategory('Pinjaman Teman');
-                }}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
-                  type === 'receivable'
-                    ? 'border-emerald-500 bg-emerald-50/50 text-emerald-900 ring-2 ring-emerald-500/20'
-                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                  <ArrowDownLeft className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-bold text-xs">Piutang Saya</div>
-                  <div className="text-[10px] text-slate-500">Orang berhutang ke saya</div>
-                </div>
-              </button>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">No. HP / WhatsApp</label>
+                <input
+                  type="text"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                  placeholder="08123456789"
+                />
+              </div>
             </div>
-          </div>
-
-          {/* Person Name & Phone */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">
-                {type === 'payable' ? 'Nama Pemberi Pinjaman / Bank' : 'Nama Peminjam'} *
-              </label>
-              <input
-                type="text"
-                required
-                value={personName}
-                onChange={(e) => setPersonName(e.target.value)}
-                placeholder={type === 'payable' ? 'Contoh: Bank BCA / Kredivo / Budi' : 'Contoh: Budi Santoso / Rian'}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">No WhatsApp / HP (Opsional)</label>
-              <input
-                type="text"
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                placeholder="Contoh: 081234567890"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-              />
-            </div>
-          </div>
+          )}
 
           {/* Title & Category */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Keperluan / Judul *</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Keperluan / Keterangan</label>
               <input
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Contoh: Pinjaman modal laptop / Talangan tiket"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                placeholder="Contoh: Cicilan iPhone / Talangan Tiket"
               />
             </div>
-
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Kategori</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Kategori</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white cursor-pointer"
               >
-                {type === 'payable' ? (
-                  <>
-                    <option value="Cicilan Bank">Cicilan Bank / KTA</option>
-                    <option value="PayLater">PayLater (Shopee/Kredivo/GoPay)</option>
-                    <option value="Kartu Kredit">Kartu Kredit</option>
-                    <option value="Pinjaman Teman">Pinjaman Teman / Keluarga</option>
-                    <option value="Pinjaman Usaha">Pinjaman Usaha</option>
-                    <option value="Lainnya">Lainnya</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="Pinjaman Teman">Pinjaman Teman</option>
-                    <option value="Pinjaman Keluarga">Pinjaman Keluarga</option>
-                    <option value="Talangan Belanja">Talangan Belanja / Konser</option>
-                    <option value="Piutang Usaha / Klien">Piutang Usaha / Klien</option>
-                    <option value="Lainnya">Lainnya</option>
-                  </>
-                )}
+                <option value="Kredit Gadget & Elektronik">Kredit Gadget & Elektronik</option>
+                <option value="Kredit Kendaraan Bermotor">Kredit Kendaraan Bermotor</option>
+                <option value="PayLater & E-Commerce">PayLater & E-Commerce</option>
+                <option value="Cicilan Bank & KTA">Cicilan Bank & KTA</option>
+                <option value="Pinjaman Teman / Keluarga">Pinjaman Teman / Keluarga</option>
+                <option value="Talangan Kantor">Talangan Kantor</option>
+                <option value="Lain-lain">Lain-lain</option>
               </select>
             </div>
           </div>
 
-          {/* Nominal Amounts */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Amount Box */}
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Total Nominal Pinjaman (Rp) *</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
-                <input
-                  type="number"
-                  required
-                  value={totalAmount || ''}
-                  onChange={(e) => setTotalAmount(Math.max(0, Number(e.target.value)))}
-                  placeholder="1000000"
-                  className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm text-slate-900"
-                />
-              </div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Total Kewajiban (Rp)</label>
+              <input
+                type="number"
+                required
+                value={totalAmount || ''}
+                onChange={(e) => setTotalAmount(Math.max(0, Number(e.target.value)))}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm text-slate-900 dark:text-white"
+                placeholder="20160000"
+              />
             </div>
-
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Sudah Dibayar (Rp)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
-                <input
-                  type="number"
-                  value={paidAmount || ''}
-                  onChange={(e) => setPaidAmount(Math.min(totalAmount, Math.max(0, Number(e.target.value))))}
-                  placeholder="0"
-                  className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-                />
-              </div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Sudah Dibayar (Rp)</label>
+              <input
+                type="number"
+                value={paidAmount || ''}
+                onChange={(e) => setPaidAmount(Math.max(0, Number(e.target.value)))}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm text-emerald-700 dark:text-emerald-400"
+                placeholder="0"
+              />
             </div>
           </div>
 
           {/* Dates */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Tanggal Mulai Pinjam</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Tanggal Mulai</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
               />
             </div>
-
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Tanggal Jatuh Tempo (Opsional)</label>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Jatuh Tempo Terdekat</label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
               />
             </div>
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block font-bold text-slate-700 mb-1">Catatan Tambahan (Opsional)</label>
-            <textarea
-              rows={2}
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Catatan Tambahan</label>
+            <input
+              type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Tenor 6 bulan, bunga 0%, transfer via BCA"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-medium"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+              placeholder="Nomor kontrak cicilan / catatan penting"
             />
           </div>
 
-          {/* New Loan Initial Transaction Sync Option */}
-          {!editingDebt && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+          {/* Sync initial transaction option (only for new loan creation) */}
+          {!editingDebt && type !== 'installment' && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-2">
               <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-slate-800 block text-xs">
-                    {type === 'payable'
-                      ? 'Catat Penerimaan Dana ke Rekening Sekarang'
-                      : 'Potong Saldo Rekening untuk Pinjaman Ini'}
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    {type === 'payable'
-                      ? 'Saldo rekening akan bertambah sejumlah pinjaman'
-                      : 'Saldo rekening akan berkurang sejumlah pinjaman yang diberikan'}
-                  </span>
-                </div>
+                <span className="font-bold text-slate-800 dark:text-slate-200">Catat Transaksi Pencairan Sekarang</span>
                 <input
                   type="checkbox"
                   checked={recordInitialTransaction}
                   onChange={(e) => setRecordInitialTransaction(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
+                  className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
                 />
               </div>
-
               {recordInitialTransaction && (
-                <div className="pt-2 border-t border-slate-200">
-                  <label className="block font-bold text-slate-700 mb-1">Pilih Rekening Terkait</label>
-                  <select
-                    value={selectedAccountId}
-                    onChange={(e) => setSelectedAccountId(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-medium"
-                  >
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name} (Saldo: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(acc.balance)})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                >
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
           )}
 
-          {/* Modal Footer Actions */}
-          <div className="flex gap-2 pt-2 border-t border-slate-100 shrink-0">
+          {/* Buttons */}
+          <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors cursor-pointer"
+              className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-sm shadow-indigo-200 transition-all cursor-pointer active:scale-98"
+              className="flex-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 dark:shadow-none transition-all cursor-pointer"
             >
-              {editingDebt ? 'Simpan Perubahan' : 'Simpan ke Cloud'}
+              Simpan Data
             </button>
           </div>
         </form>
