@@ -549,6 +549,7 @@ export default function App() {
           <DebtReceivable
             debts={debts}
             accounts={accounts}
+            transactions={transactions}
             onSaveDebt={handleSaveDebt}
             onDeleteDebt={handleDeleteDebt}
             onAddTransaction={handleAddTransaction}

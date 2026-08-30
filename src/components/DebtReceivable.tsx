@@ -6,6 +6,8 @@ import {
   Account,
   Transaction,
 } from '../types/finance';
+import { MonthlyCreditCalculator } from './MonthlyCreditCalculator';
+import { PaymentCalendar } from './PaymentCalendar';
 import {
   HandCoins,
   ArrowUpRight,
@@ -35,11 +37,15 @@ import {
   Layers,
   ChevronRight,
   Info,
+  CalendarDays,
+  ListFilter,
 } from 'lucide-react';
 
 interface DebtReceivableProps {
   debts: DebtRecord[];
   accounts: Account[];
+  transactions?: Transaction[];
+  initialView?: 'list' | 'calendar' | 'monthly_calculator';
   onSaveDebt: (debt: DebtRecord) => Promise<void>;
   onDeleteDebt: (debtId: string) => Promise<void>;
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<void>;
@@ -48,10 +54,13 @@ interface DebtReceivableProps {
 export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   debts,
   accounts,
+  transactions = [],
+  initialView = 'list',
   onSaveDebt,
   onDeleteDebt,
   onAddTransaction,
 }) => {
+  const [mainView, setMainView] = useState<'list' | 'calendar' | 'monthly_calculator'>(initialView);
   const [activeTab, setActiveTab] = useState<'all' | 'installment' | 'payable' | 'receivable'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | DebtStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -472,115 +481,205 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         </div>
       </div>
 
-      {/* Action Banner: Kalkulator Simulasi Kredit Barang */}
-      <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 dark:from-indigo-950 dark:via-slate-900 dark:to-slate-950 rounded-3xl p-5 sm:p-6 text-white shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-indigo-700/50 dark:border-slate-800">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-indigo-300 shrink-0 shadow-inner">
-            <Calculator className="w-6 h-6 text-indigo-200" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-base text-white tracking-tight">
-                Kalkulator & Simulasi Kredit Barang
-              </h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
-                Fitur Baru
-              </span>
-            </div>
-            <p className="text-xs text-indigo-200/80 mt-1 max-w-xl">
-              Hitung estimasi angsuran per bulan (DP, tenor, bunga flat/admin), cek total selisih bunga, serta pantau progres berapa bulan cicilan yang sudah lunas.
-            </p>
-          </div>
+      {/* View Switcher: List vs Calendar vs Monthly Credit Calculator */}
+      <div className="flex items-center justify-between gap-3 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 overflow-x-auto">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <button
+            onClick={() => setMainView('list')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              mainView === 'list'
+                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <ListFilter className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Daftar Kredit & Hutang</span>
+          </button>
+
+          <button
+            onClick={() => setMainView('calendar')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              mainView === 'calendar'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Kalender Pembayaran</span>
+            <span className="hidden sm:inline-flex text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold border border-indigo-200 dark:border-indigo-800">
+              Jatuh Tempo
+            </span>
+          </button>
+
+          <button
+            onClick={() => setMainView('monthly_calculator')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              mainView === 'monthly_calculator'
+                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Calculator className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Hitung Cicilan Tiap Bulan</span>
+            <span className="hidden sm:inline-flex text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold border border-emerald-200 dark:border-emerald-800">
+              DSR
+            </span>
+          </button>
         </div>
+
         <button
-          onClick={() => setIsCalculatorOpen(true)}
-          className="px-4 py-2.5 bg-white hover:bg-slate-100 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-indigo-900 dark:text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-2 shrink-0 cursor-pointer"
+          onClick={() => {
+            setEditingDebt(null);
+            setIsModalOpen(true);
+          }}
+          className="hidden sm:flex px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs items-center gap-1.5 cursor-pointer shrink-0"
         >
-          <Calculator className="w-4 h-4 text-indigo-600 dark:text-white" />
-          <span>Buka Kalkulator Kredit</span>
+          <Plus className="w-3.5 h-3.5" />
+          <span>+ Catat Baru</span>
         </button>
       </div>
 
-      {/* Control Bar: Filters, Search, and Add Button */}
-      <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row gap-3 items-center justify-between transition-colors">
-        {/* Left Side: Tab Type Switch */}
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full lg:w-auto overflow-x-auto scrollbar-none">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-              activeTab === 'all' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            Semua ({debts.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('installment')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'installment' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Kredit Barang ({debts.filter((d) => d.type === 'installment' || d.isInstallment).length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('payable')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
-              activeTab === 'payable' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>Hutang Tunai ({debts.filter((d) => d.type === 'payable').length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('receivable')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
-              activeTab === 'receivable' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <ArrowDownLeft className="w-3.5 h-3.5" />
-            <span>Piutang ({debts.filter((d) => d.type === 'receivable').length})</span>
-          </button>
-        </div>
-
-        {/* Middle: Search & Filter */}
-        <div className="flex items-center gap-2 w-full lg:w-auto flex-1 max-w-md">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Cari barang, lembaga (Kredivo/Spay), atau nama..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+      {/* Render Sub View Based on Tab */}
+      {mainView === 'calendar' ? (
+        <PaymentCalendar
+          debts={debts}
+          accounts={accounts}
+          transactions={transactions}
+          onOpenPaymentModal={handleOpenPaymentModal}
+          onOpenAddDebt={() => {
+            setEditingDebt(null);
+            setIsModalOpen(true);
+          }}
+          onOpenAddTransaction={() => {}}
+        />
+      ) : mainView === 'monthly_calculator' ? (
+        <MonthlyCreditCalculator
+          debts={debts}
+          accounts={accounts}
+          transactions={transactions}
+          onOpenPaymentModal={handleOpenPaymentModal}
+          onOpenAddInstallment={() => {
+            setEditingDebt(null);
+            setIsModalOpen(true);
+          }}
+        />
+      ) : (
+        <>
+          {/* Action Banner: Kalkulator Simulasi Kredit Barang */}
+          <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 dark:from-indigo-950 dark:via-slate-900 dark:to-slate-950 rounded-3xl p-5 sm:p-6 text-white shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-indigo-700/50 dark:border-slate-800">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-indigo-300 shrink-0 shadow-inner">
+                <Calculator className="w-6 h-6 text-indigo-200" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-white tracking-tight">
+                    Kalkulator & Simulasi Kredit Barang
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                    Fitur Baru
+                  </span>
+                </div>
+                <p className="text-xs text-indigo-200/80 mt-1 max-w-xl">
+                  Hitung estimasi angsuran per bulan (DP, tenor, bunga flat/admin), cek total selisih bunga, serta pantau progres berapa bulan cicilan yang sudah lunas.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setMainView('monthly_calculator')}
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all border border-white/20 flex items-center gap-2 shrink-0 cursor-pointer"
+              >
+                <span>Lihat Beban Bulanan</span>
+              </button>
+              <button
+                onClick={() => setIsCalculatorOpen(true)}
+                className="px-4 py-2.5 bg-white hover:bg-slate-100 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-indigo-900 dark:text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-2 shrink-0 cursor-pointer"
+              >
+                <Calculator className="w-4 h-4 text-indigo-600 dark:text-white" />
+                <span>Simulasi Cicilan Baru</span>
+              </button>
+            </div>
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
-          >
-            <option value="all">Semua Status</option>
-            <option value="unpaid">Belum Lunas</option>
-            <option value="partial">Sedang Dicicil</option>
-            <option value="paid">Sudah Lunas</option>
-          </select>
-        </div>
+          {/* Control Bar: Filters, Search, and Add Button */}
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row gap-3 items-center justify-between transition-colors">
+            {/* Left Side: Tab Type Switch */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full lg:w-auto overflow-x-auto scrollbar-none">
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === 'all' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Semua ({debts.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('installment')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'installment' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Kredit Barang ({debts.filter((d) => d.type === 'installment' || d.isInstallment).length})</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('payable')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  activeTab === 'payable' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                <span>Hutang Tunai ({debts.filter((d) => d.type === 'payable').length})</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('receivable')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
+                  activeTab === 'receivable' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <ArrowDownLeft className="w-3.5 h-3.5" />
+                <span>Piutang ({debts.filter((d) => d.type === 'receivable').length})</span>
+              </button>
+            </div>
 
-        {/* Right Side: Add Buttons */}
-        <div className="flex items-center gap-2 w-full lg:w-auto">
-          <button
-            onClick={() => {
-              setEditingDebt(null);
-              setIsModalOpen(true);
-            }}
-            className="w-full lg:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200 dark:shadow-none transition-all cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Catat Kredit / Hutang</span>
-          </button>
-        </div>
-      </div>
+            {/* Middle: Search & Filter */}
+            <div className="flex items-center gap-2 w-full lg:w-auto flex-1 max-w-md">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Cari barang, lembaga (Kredivo/Spay), atau nama..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="all">Semua Status</option>
+                <option value="unpaid">Belum Lunas</option>
+                <option value="partial">Dicicil Sebagian</option>
+                <option value="paid">Sudah Lunas</option>
+              </select>
+            </div>
+
+            {/* Right: Add Button */}
+            <button
+              onClick={() => {
+                setEditingDebt(null);
+                setIsModalOpen(true);
+              }}
+              className="w-full lg:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Catatan</span>
+            </button>
+          </div>
 
       {/* Debts & Installments List */}
       {filteredDebts.length === 0 ? (
@@ -913,6 +1012,8 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
           })}
         </div>
       )}
+    </>
+  )}
 
       {/* MODAL: Payment / Angsuran Confirmation */}
       {isPaymentModalOpen && activePaymentDebt && (
