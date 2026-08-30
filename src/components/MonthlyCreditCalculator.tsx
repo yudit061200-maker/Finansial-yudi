@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { DebtRecord, Account, Transaction } from '../types/finance';
-import { formatRupiah, formatDateIndo } from '../utils/formatters';
+import { formatRupiah, formatDateIndo, getNearestDueInfo } from '../utils/formatters';
 import {
   Calculator,
   ShoppingBag,
@@ -473,16 +473,26 @@ export const MonthlyCreditCalculator: React.FC<MonthlyCreditCalculatorProps> = (
 
                   {/* Actions */}
                   <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-2">
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>
-                        {item.dueDate ? `Jatuh tempo: ${formatDateIndo(item.dueDate)}` : `Bulan ke-${paid + 1}`}
-                      </span>
-                    </div>
+                    {(() => {
+                      const dueInfo = getNearestDueInfo(item.dueDayOfMonth, item.dueDate, item.status);
+                      return (
+                        <div className="text-[11px] flex items-center gap-1.5 font-medium">
+                          <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                          <span className="text-slate-700 dark:text-slate-300 font-semibold">
+                            {dueInfo.dueDateStr ? `Jatuh tempo: ${dueInfo.formattedDate}` : `Bulan ke-${paid + 1}`}
+                          </span>
+                          {dueInfo.statusLabel && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${dueInfo.badgeClass}`}>
+                              {dueInfo.statusLabel}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <button
                       onClick={() => onOpenPaymentModal(item, paid + 1)}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
                     >
                       <span>Bayar Angsuran</span>
                       <ChevronRight className="w-3.5 h-3.5" />

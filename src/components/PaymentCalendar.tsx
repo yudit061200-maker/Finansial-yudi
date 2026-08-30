@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { DebtRecord, Account, Transaction } from '../types/finance';
-import { formatRupiah, formatDateIndo, formatDateFull } from '../utils/formatters';
+import { formatRupiah, formatRupiahShort, formatDateIndo, formatDateFull } from '../utils/formatters';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -99,16 +99,18 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
     const prefix = `${currentYear}-${targetMonthStr}`;
 
     // 1. Process Debts & Installments
+    const maxDaysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
     debts.forEach((debt) => {
       const isInst = debt.type === 'installment' || debt.isInstallment;
 
       // Determine date for this month
       let eventDate = debt.dueDate;
 
-      // If it's a recurring monthly installment and has a dueDayOfMonth, calculate date for selected month
+      // If it's a recurring monthly installment and has a dueDayOfMonth, calculate exact date for selected month
       if (isInst && debt.dueDayOfMonth && debt.status !== 'paid') {
-        const day = Math.min(28, debt.dueDayOfMonth).toString().padStart(2, '0');
-        eventDate = `${prefix}-${day}`;
+        const validDay = Math.min(debt.dueDayOfMonth, maxDaysInCurrentMonth).toString().padStart(2, '0');
+        eventDate = `${prefix}-${validDay}`;
       }
 
       if (!eventDate) return;
@@ -552,29 +554,30 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                 const hasEvents = cell.events.length > 0;
                 const hasOverdue = cell.events.some((e) => e.status === 'overdue');
                 const hasInstallment = cell.events.some((e) => e.type === 'installment');
+                const dayTotalAmount = cell.events.reduce((sum, e) => sum + e.amount, 0);
 
                 return (
                   <button
                     key={`${cell.dateStr}-${idx}`}
                     onClick={() => setSelectedDateStr(cell.dateStr)}
-                    className={`min-h-[85px] sm:min-h-[105px] p-2 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative overflow-hidden ${
+                    className={`min-h-[90px] sm:min-h-[115px] p-2 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative overflow-hidden ${
                       isSelected
-                        ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/50 ring-2 ring-indigo-500/30'
+                        ? 'border-indigo-600 bg-indigo-50/80 dark:bg-indigo-950/60 ring-2 ring-indigo-500/40 shadow-xs'
                         : isToday
-                        ? 'border-amber-400 dark:border-amber-500 bg-amber-50/30 dark:bg-amber-950/20'
+                        ? 'border-amber-400 dark:border-amber-500 bg-amber-50/40 dark:bg-amber-950/30'
                         : cell.isCurrentMonth
-                        ? 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
-                        : 'border-slate-100 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-900/30 opacity-40 hover:opacity-70'
+                        ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-300 dark:hover:border-indigo-700'
+                        : 'border-slate-100 dark:border-slate-800/40 bg-slate-50/50 dark:bg-slate-900/30 opacity-40 hover:opacity-75'
                     }`}
                   >
                     {/* Top Day Number & Badges */}
                     <div className="flex items-center justify-between w-full">
                       <span
-                        className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                        className={`text-xs font-black w-6 h-6 rounded-full flex items-center justify-center ${
                           isToday
-                            ? 'bg-amber-500 text-white font-black shadow-xs'
+                            ? 'bg-amber-500 text-white shadow-xs ring-2 ring-amber-300 dark:ring-amber-700'
                             : isSelected
-                            ? 'bg-indigo-600 text-white font-black'
+                            ? 'bg-indigo-600 text-white shadow-xs'
                             : cell.isCurrentMonth
                             ? 'text-slate-900 dark:text-white'
                             : 'text-slate-400 dark:text-slate-600'
@@ -584,40 +587,55 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                       </span>
 
                       {hasEvents && (
-                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded-md">
-                          {cell.events.length}
+                        <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.2 rounded-md">
+                          {cell.events.length} tagihan
                         </span>
                       )}
                     </div>
 
-                    {/* Event Badges in Cell */}
+                    {/* Event Badges with Clear Monetary Numbers in Cell */}
                     <div className="mt-1 space-y-1 w-full overflow-hidden">
                       {cell.events.slice(0, 2).map((ev) => (
                         <div
                           key={ev.id}
-                          className={`text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded truncate flex items-center gap-1 ${
+                          className={`text-[9px] sm:text-[10px] p-1 rounded-lg flex flex-col gap-0.5 border leading-tight ${
                             ev.status === 'paid'
-                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
                               : ev.status === 'overdue'
-                              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/60 font-bold'
+                              ? 'bg-rose-50 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-800 font-bold'
                               : ev.type === 'installment'
-                              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60'
+                              ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-900 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800'
                               : ev.type === 'payable'
-                              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
-                              : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                              ? 'bg-rose-50 dark:bg-rose-950/70 text-rose-900 dark:text-rose-200 border-rose-200 dark:border-rose-800'
+                              : 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
                           }`}
                         >
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: ev.color }}
-                          ></span>
-                          <span className="truncate">{ev.title}</span>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="truncate font-semibold text-[9px] sm:text-[10px]">{ev.title}</span>
+                            {ev.debtRef?.tenorMonths ? (
+                              <span className="text-[8px] px-1 py-0.2 rounded bg-white/80 dark:bg-slate-900/80 font-black shrink-0">
+                                Bln {(ev.debtRef.paidMonths || 0) + 1}/{ev.debtRef.tenorMonths}
+                              </span>
+                            ) : null}
+                          </div>
+                          {/* Big Prominent Number for Installment Amount */}
+                          <div className="font-black text-[10px] sm:text-[11px] tracking-tight text-slate-900 dark:text-white flex items-center justify-between">
+                            <span>{formatRupiahShort(ev.amount)}</span>
+                            <span className={`text-[8px] font-bold uppercase px-1 py-0.2 rounded ${
+                              ev.status === 'paid' ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900' : 'text-indigo-700 bg-indigo-100 dark:bg-indigo-900'
+                            }`}>
+                              {ev.status === 'paid' ? 'Lunas' : 'Jatuh Tempo'}
+                            </span>
+                          </div>
                         </div>
                       ))}
 
                       {cell.events.length > 2 && (
-                        <div className="text-[9px] font-bold text-slate-400 pl-1">
-                          +{cell.events.length - 2} lagi
+                        <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400 pl-1 flex items-center justify-between">
+                          <span>+{cell.events.length - 2} item lagi</span>
+                          <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400">
+                            Total: {formatRupiahShort(dayTotalAmount)}
+                          </span>
                         </div>
                       )}
                     </div>

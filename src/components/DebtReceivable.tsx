@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   DebtRecord,
   DebtType,
@@ -6,6 +6,14 @@ import {
   Account,
   Transaction,
 } from '../types/finance';
+import {
+  formatRupiah,
+  formatRupiahShort,
+  formatDateIndo,
+  formatDateFull,
+  calculateNearestDueDate,
+  getNearestDueInfo,
+} from '../utils/formatters';
 import { MonthlyCreditCalculator } from './MonthlyCreditCalculator';
 import { PaymentCalendar } from './PaymentCalendar';
 import {
@@ -111,14 +119,12 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     // Total Semua Kewajiban (Hutang Tunai + Kredit Barang)
     const totalAllLiabilities = totalPayable + totalInstallmentRemaining;
 
-    // Overdue or upcoming within 7 days
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    // Overdue or upcoming within 7 days based on nearest due date
     const urgentCount = debts.filter((d) => {
-      if (d.status === 'paid' || !d.dueDate) return false;
-      const due = new Date(d.dueDate);
-      const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays <= 7;
+      if (d.status === 'paid') return false;
+      const dueInfo = getNearestDueInfo(d.dueDayOfMonth, d.dueDate, d.status);
+      if (!dueInfo.dueDateStr) return false;
+      return dueInfo.daysRemaining <= 7;
     }).length;
 
     return {
@@ -165,9 +171,11 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         if (sortBy === 'dueDate') {
           if (a.status !== 'paid' && b.status === 'paid') return -1;
           if (a.status === 'paid' && b.status !== 'paid') return 1;
-          const dueA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-          const dueB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-          return dueA - dueB;
+          const dueA = getNearestDueInfo(a.dueDayOfMonth, a.dueDate, a.status).dueDateStr;
+          const dueB = getNearestDueInfo(b.dueDayOfMonth, b.dueDate, b.status).dueDateStr;
+          const timeA = dueA ? new Date(dueA).getTime() : Infinity;
+          const timeB = dueB ? new Date(dueB).getTime() : Infinity;
+          return timeA - timeB;
         }
         if (sortBy === 'amount') {
           return b.remainingAmount - a.remainingAmount;
@@ -190,7 +198,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       const nextMonth = (debt.paidMonths || 0) + 1;
       setPayingMonthNumber(monthNum || nextMonth);
       setPaymentAmount(Math.min(debt.monthlyInstallment, debt.remainingAmount));
-      setPaymentNotes(`Pembayaran Angsuran Bulan Ke-${monthNum || nextMonth}: ${debt.title}`);
+      setPaymentNotes(`Pembayaran Angsuran Bulan Ke-${monthNum || nextMonth}: ${debt.itemName || debt.title}`);
     } else {
       setPayingMonthNumber(undefined);
       setPaymentAmount(debt.remainingAmount);
@@ -215,40 +223,49 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     const newRemainingAmount = Math.max(0, activePaymentDebt.totalAmount - newPaidAmount);
     const newStatus: DebtStatus = newRemainingAmount === 0 ? 'paid' : 'partial';
 
-    // Calculate new paid months for installments
+    // Calculate how many months this payment covers for installments
+    let monthsCovered = 1;
+    if (isInst && activePaymentDebt.monthlyInstallment && activePaymentDebt.monthlyInstallment > 0) {
+      monthsCovered = Math.max(1, Math.round(paymentAmount / activePaymentDebt.monthlyInstallment));
+    }
+
     let newPaidMonths = activePaymentDebt.paidMonths || 0;
     if (isInst) {
       if (payingMonthNumber && payingMonthNumber > newPaidMonths) {
         newPaidMonths = payingMonthNumber;
-      } else if (activePaymentDebt.monthlyInstallment && activePaymentDebt.monthlyInstallment > 0) {
-        const addedMonths = Math.max(1, Math.round(paymentAmount / activePaymentDebt.monthlyInstallment));
-        newPaidMonths = Math.min(activePaymentDebt.tenorMonths || 12, newPaidMonths + addedMonths);
       } else {
-        newPaidMonths += 1;
+        newPaidMonths = Math.min(activePaymentDebt.tenorMonths || 12, newPaidMonths + monthsCovered);
       }
       if (newRemainingAmount === 0 && activePaymentDebt.tenorMonths) {
         newPaidMonths = activePaymentDebt.tenorMonths;
       }
     }
 
-    const nextMonthNum = isInst ? (payingMonthNumber || (activePaymentDebt.paidMonths || 0) + 1) : undefined;
+    const currentMonthNum = isInst ? (payingMonthNumber || (activePaymentDebt.paidMonths || 0) + 1) : undefined;
+    const nextMonthNum = isInst ? (newPaidMonths < (activePaymentDebt.tenorMonths || 12) ? newPaidMonths + 1 : newPaidMonths) : undefined;
 
     const newPaymentEntry = {
       id: `pay-${Date.now()}`,
       date: paymentDate,
       amount: paymentAmount,
       accountId: paymentAccountId,
-      notes: paymentNotes.trim() || (isInst ? `Cicilan Bulan Ke-${nextMonthNum}` : 'Pembayaran angsuran'),
-      monthNumber: nextMonthNum,
+      notes: paymentNotes.trim() || (isInst ? `Cicilan Bulan Ke-${currentMonthNum || newPaidMonths}` : 'Pembayaran angsuran'),
+      monthNumber: currentMonthNum,
     };
 
-    // Calculate next due date for installment if not paid yet
+    // Calculate next due date safely advancing by monthsCovered
     let newDueDate = activePaymentDebt.dueDate;
     if (isInst && newStatus !== 'paid' && activePaymentDebt.dueDayOfMonth) {
-      const currentDue = activePaymentDebt.dueDate ? new Date(activePaymentDebt.dueDate) : new Date();
-      currentDue.setMonth(currentDue.getMonth() + 1);
-      currentDue.setDate(activePaymentDebt.dueDayOfMonth);
-      newDueDate = currentDue.toISOString().split('T')[0];
+      const baseDate = activePaymentDebt.dueDate ? new Date(activePaymentDebt.dueDate) : new Date(paymentDate);
+      const curY = baseDate.getFullYear();
+      const curM = baseDate.getMonth();
+      const targetM = curM + monthsCovered;
+      const targetY = curY + Math.floor(targetM / 12);
+      const normM = ((targetM % 12) + 12) % 12;
+      const maxDays = new Date(targetY, normM + 1, 0).getDate();
+      const validDay = Math.min(activePaymentDebt.dueDayOfMonth || 5, maxDays);
+      const nextDue = new Date(targetY, normM, validDay);
+      newDueDate = nextDue.toISOString().split('T')[0];
     }
 
     const updatedDebt: DebtRecord = {
@@ -280,7 +297,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       } else {
         // Bayar Hutang / Kredit Barang -> Pengeluaran Kas/Bank
         const itemLabel = isInst
-          ? `Bayar Cicilan: ${activePaymentDebt.itemName || activePaymentDebt.title} (Bulan ${nextMonthNum || newPaidMonths}/${activePaymentDebt.tenorMonths || 12})`
+          ? `Bayar Cicilan: ${activePaymentDebt.itemName || activePaymentDebt.title} (Bulan ${currentMonthNum || newPaidMonths}/${activePaymentDebt.tenorMonths || 12})`
           : `Bayar Hutang: ${activePaymentDebt.personName} (${activePaymentDebt.title})`;
 
         await onAddTransaction({
@@ -288,7 +305,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
           title: itemLabel,
           amount: paymentAmount,
           type: 'expense',
-          category: isInst ? 'Tagihan & Utilitas' : 'Tagihan & Utilitas',
+          category: 'Tagihan & Utilitas',
           accountId: paymentAccountId,
           notes: paymentNotes || (isInst ? `Angsuran kredit ${activePaymentDebt.providerName || activePaymentDebt.personName}` : `Pembayaran hutang kepada ${activePaymentDebt.personName}`),
           source: 'manual',
@@ -336,56 +353,33 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   };
 
   const getDueStatusBadge = (debt: DebtRecord) => {
-    if (debt.status === 'paid') {
+    const dueInfo = getNearestDueInfo(debt.dueDayOfMonth, debt.dueDate, debt.status);
+
+    if (dueInfo.statusType === 'paid') {
       return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
           Lunas
         </span>
       );
     }
 
-    if (!debt.dueDate) {
+    if (!dueInfo.dueDateStr) {
       return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full">
           Tanpa Jatuh Tempo
         </span>
       );
     }
 
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const due = new Date(debt.dueDate);
-    const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) {
-      return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 animate-pulse">
-          <AlertCircle className="w-3 h-3 text-rose-600" />
-          Lewat {Math.abs(diffDays)} Hari
-        </span>
-      );
-    }
-    if (diffDays === 0) {
-      return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-          <Clock className="w-3 h-3 text-amber-600" />
-          Jatuh Tempo Hari Ini
-        </span>
-      );
-    }
-    if (diffDays <= 7) {
-      return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-          <Clock className="w-3 h-3 text-amber-600" />
-          {diffDays} Hari Lagi
-        </span>
-      );
-    }
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
-        <Calendar className="w-3 h-3 text-slate-400" />
-        {diffDays} Hari Lagi
+      <span className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full ${dueInfo.badgeClass}`}>
+        {dueInfo.statusType === 'today' || dueInfo.statusType === 'tomorrow' || dueInfo.statusType === 'overdue' ? (
+          <Clock className="w-3 h-3 shrink-0" />
+        ) : (
+          <Calendar className="w-3 h-3 shrink-0" />
+        )}
+        <span>{dueInfo.statusLabel}</span>
       </span>
     );
   };
@@ -894,9 +888,16 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                       />
                     </div>
 
-                    <div className="flex justify-between items-center text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-semibold">
-                      <span>Mulai: {debt.startDate}</span>
-                      <span>{progressPercent}% Terbayar</span>
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 font-semibold">
+                      <span>Mulai: {debt.startDate ? formatDateIndo(debt.startDate) : '-'}</span>
+                      {debt.status !== 'paid' ? (
+                        <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-indigo-500" />
+                          <span>Jatuh tempo: {getNearestDueInfo(debt.dueDayOfMonth, debt.dueDate, debt.status).formattedDate}</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">100% Lunas</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1041,18 +1042,22 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
             </div>
 
             {/* Quick Balance Status */}
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl text-xs space-y-1.5">
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl text-xs space-y-2">
               <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>Total Kewajiban:</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(activePaymentDebt.totalAmount)}</span>
+              </div>
+              <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                <span>Sudah Dibayar Sebelumnya:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(activePaymentDebt.paidAmount)}</span>
               </div>
               <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>Sisa Belum Dibayar:</span>
                 <span className="font-bold text-rose-600 dark:text-rose-400">{formatCurrency(activePaymentDebt.remainingAmount)}</span>
               </div>
               {(activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment) && (
-                <div className="flex justify-between text-indigo-700 dark:text-indigo-400 font-bold pt-1 border-t border-slate-200 dark:border-slate-700">
-                  <span>Progres Bulan:</span>
+                <div className="flex justify-between text-indigo-700 dark:text-indigo-400 font-bold pt-1.5 border-t border-slate-200 dark:border-slate-700">
+                  <span>Progres Angsuran:</span>
                   <span>
                     Bulan ke-{(activePaymentDebt.paidMonths || 0) + 1} dari {activePaymentDebt.tenorMonths || 12} Bulan
                   </span>
@@ -1073,24 +1078,89 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                     placeholder="Contoh: 1500000"
                   />
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {activePaymentDebt.monthlyInstallment && activePaymentDebt.monthlyInstallment > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setPaymentAmount(activePaymentDebt.monthlyInstallment || 0)}
-                      className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold transition-colors cursor-pointer"
-                    >
-                      1 Bulan Angsuran ({formatCurrency(activePaymentDebt.monthlyInstallment)})
-                    </button>
-                  )}
+
+                {/* Quick Payment Action Pills */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {activePaymentDebt.monthlyInstallment && activePaymentDebt.monthlyInstallment > 0 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = Math.min(activePaymentDebt.monthlyInstallment || 0, activePaymentDebt.remainingAmount);
+                          setPaymentAmount(val);
+                          const nextM = (activePaymentDebt.paidMonths || 0) + 1;
+                          setPayingMonthNumber(nextM);
+                          setPaymentNotes(`Pembayaran Angsuran Bulan Ke-${nextM}: ${activePaymentDebt.itemName || activePaymentDebt.title}`);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50"
+                      >
+                        1 Bulan ({formatCurrency(activePaymentDebt.monthlyInstallment)})
+                      </button>
+
+                      {activePaymentDebt.remainingAmount >= (activePaymentDebt.monthlyInstallment * 2) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = Math.min((activePaymentDebt.monthlyInstallment || 0) * 2, activePaymentDebt.remainingAmount);
+                            setPaymentAmount(val);
+                            const nextM = (activePaymentDebt.paidMonths || 0) + 2;
+                            setPayingMonthNumber(nextM);
+                            setPaymentNotes(`Pembayaran Angsuran 2 Bulan (Bln ${(activePaymentDebt.paidMonths || 0) + 1}-${nextM}): ${activePaymentDebt.itemName || activePaymentDebt.title}`);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50"
+                        >
+                          2 Bulan ({formatCurrency(activePaymentDebt.monthlyInstallment * 2)})
+                        </button>
+                      )}
+
+                      {activePaymentDebt.remainingAmount >= (activePaymentDebt.monthlyInstallment * 3) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = Math.min((activePaymentDebt.monthlyInstallment || 0) * 3, activePaymentDebt.remainingAmount);
+                            setPaymentAmount(val);
+                            const nextM = (activePaymentDebt.paidMonths || 0) + 3;
+                            setPayingMonthNumber(nextM);
+                            setPaymentNotes(`Pembayaran Angsuran 3 Bulan (Bln ${(activePaymentDebt.paidMonths || 0) + 1}-${nextM}): ${activePaymentDebt.itemName || activePaymentDebt.title}`);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50"
+                        >
+                          3 Bulan ({formatCurrency(activePaymentDebt.monthlyInstallment * 3)})
+                        </button>
+                      )}
+                    </>
+                  ) : null}
+
                   <button
                     type="button"
-                    onClick={() => setPaymentAmount(activePaymentDebt.remainingAmount)}
-                    className="px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold transition-colors cursor-pointer"
+                    onClick={() => {
+                      setPaymentAmount(activePaymentDebt.remainingAmount);
+                      setPayingMonthNumber(activePaymentDebt.tenorMonths);
+                      setPaymentNotes(`Pelunasan Penuh: ${activePaymentDebt.itemName || activePaymentDebt.title}`);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold transition-colors cursor-pointer border border-emerald-200/50"
                   >
                     Lunaskan Semua ({formatCurrency(activePaymentDebt.remainingAmount)})
                   </button>
                 </div>
+
+                {/* Live Preview of After Payment State */}
+                {paymentAmount > 0 && (
+                  <div className="mt-2 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-[11px] space-y-1">
+                    <div className="flex justify-between font-semibold text-slate-700 dark:text-slate-300">
+                      <span>Sisa Pokok Setelah Bayar:</span>
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {formatCurrency(Math.max(0, activePaymentDebt.remainingAmount - paymentAmount))}
+                      </span>
+                    </div>
+                    {paymentAmount >= activePaymentDebt.remainingAmount && (
+                      <div className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Kewajiban ini akan otomatis berstatus LUNAS.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1105,7 +1175,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  {activePaymentDebt.type === 'receivable' ? 'Rekening Penampung' : 'Rekening Sumber Dana'}
+                  {activePaymentDebt.type === 'receivable' ? 'Rekening Penampung (Pemasukan)' : 'Rekening Sumber Dana (Pengeluaran)'}
                 </label>
                 <select
                   value={paymentAccountId}
@@ -1121,7 +1191,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Catatan Tambahan</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Catatan Tambahan Transaksi</label>
                 <input
                   type="text"
                   value={paymentNotes}
@@ -1252,9 +1322,7 @@ const InstallmentCalculatorModal: React.FC<InstallmentCalculatorModalProps> = ({
       return;
     }
 
-    const nextDueDate = new Date(startDate);
-    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-    nextDueDate.setDate(dueDay);
+    const calculatedDueDate = calculateNearestDueDate(dueDay);
 
     const newRecord: DebtRecord = {
       id: `debt-inst-${Date.now()}`,
@@ -1276,7 +1344,7 @@ const InstallmentCalculatorModal: React.FC<InstallmentCalculatorModalProps> = ({
       paidAmount: currentPaidAmount,
       remainingAmount: currentRemainingAmount,
       startDate: startDate,
-      dueDate: nextDueDate.toISOString().split('T')[0],
+      dueDate: calculatedDueDate,
       status: currentRemainingAmount === 0 ? 'paid' : paidMonthsInitial > 0 ? 'partial' : 'unpaid',
       category: 'Kredit Gadget & Elektronik',
       notes: `Cicilan ${itemName} via ${providerName} (Tenor ${tenorMonths} Bulan @ ${formatCurrency(totalMonthlyInstallment)}/bln). Bunga ${interestRatePercent}%/bln.`,
@@ -1573,31 +1641,75 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
   accounts,
   onAddTransaction,
 }) => {
-  const [type, setType] = useState<DebtType>(editingDebt?.type || 'installment');
-  const [itemName, setItemName] = useState(editingDebt?.itemName || '');
-  const [providerName, setProviderName] = useState(editingDebt?.providerName || '');
-  const [personName, setPersonName] = useState(editingDebt?.personName || '');
-  const [contactPhone, setContactPhone] = useState(editingDebt?.contactPhone || '');
-  const [title, setTitle] = useState(editingDebt?.title || '');
-  const [totalAmount, setTotalAmount] = useState<number>(editingDebt?.totalAmount || 0);
-  const [paidAmount, setPaidAmount] = useState<number>(editingDebt?.paidAmount || 0);
-  const [tenorMonths, setTenorMonths] = useState<number>(editingDebt?.tenorMonths || 12);
-  const [paidMonths, setPaidMonths] = useState<number>(editingDebt?.paidMonths || 0);
-  const [monthlyInstallment, setMonthlyInstallment] = useState<number>(editingDebt?.monthlyInstallment || 0);
-  const [dueDayOfMonth, setDueDayOfMonth] = useState<number>(editingDebt?.dueDayOfMonth || 5);
-  const [startDate, setStartDate] = useState(editingDebt?.startDate || new Date().toISOString().split('T')[0]);
-  const [dueDate, setDueDate] = useState(editingDebt?.dueDate || '');
-  const [category, setCategory] = useState(
-    editingDebt?.category ||
-      (type === 'installment'
-        ? 'Kredit Gadget & Elektronik'
-        : type === 'payable'
-        ? 'Cicilan Bank'
-        : 'Pinjaman Teman')
-  );
-  const [notes, setNotes] = useState(editingDebt?.notes || '');
+  const [type, setType] = useState<DebtType>('installment');
+  const [itemName, setItemName] = useState('');
+  const [providerName, setProviderName] = useState('');
+  const [personName, setPersonName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [title, setTitle] = useState('');
+  const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [paidAmount, setPaidAmount] = useState<number>(0);
+  const [tenorMonths, setTenorMonths] = useState<number>(12);
+  const [paidMonths, setPaidMonths] = useState<number>(0);
+  const [monthlyInstallment, setMonthlyInstallment] = useState<number>(0);
+  const [dueDayOfMonth, setDueDayOfMonth] = useState<number>(5);
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dueDate, setDueDate] = useState('');
+  const [category, setCategory] = useState('Kredit Gadget & Elektronik');
+  const [notes, setNotes] = useState('');
   const [recordInitialTransaction, setRecordInitialTransaction] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || '');
+
+  // Synchronize state when editingDebt changes or modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (editingDebt) {
+        const dType = editingDebt.type || (editingDebt.isInstallment ? 'installment' : 'payable');
+        const day = editingDebt.dueDayOfMonth || 5;
+        setType(dType);
+        setItemName(editingDebt.itemName || '');
+        setProviderName(editingDebt.providerName || '');
+        setPersonName(editingDebt.personName || '');
+        setContactPhone(editingDebt.contactPhone || '');
+        setTitle(editingDebt.title || '');
+        setTotalAmount(editingDebt.totalAmount || 0);
+        setPaidAmount(editingDebt.paidAmount || 0);
+        setTenorMonths(editingDebt.tenorMonths || 12);
+        setPaidMonths(editingDebt.paidMonths || 0);
+        setMonthlyInstallment(
+          editingDebt.monthlyInstallment ||
+          (editingDebt.totalAmount && editingDebt.tenorMonths
+            ? Math.round(editingDebt.totalAmount / editingDebt.tenorMonths)
+            : 0)
+        );
+        setDueDayOfMonth(day);
+        setStartDate(editingDebt.startDate || new Date().toISOString().split('T')[0]);
+        setDueDate(editingDebt.dueDate || calculateNearestDueDate(day));
+        setCategory(editingDebt.category || (dType === 'installment' ? 'Kredit Gadget & Elektronik' : dType === 'payable' ? 'Cicilan Bank' : 'Pinjaman Teman'));
+        setNotes(editingDebt.notes || '');
+        setRecordInitialTransaction(false);
+      } else {
+        setType('installment');
+        setItemName('');
+        setProviderName('');
+        setPersonName('');
+        setContactPhone('');
+        setTitle('');
+        setTotalAmount(0);
+        setPaidAmount(0);
+        setTenorMonths(12);
+        setPaidMonths(0);
+        setMonthlyInstallment(0);
+        setDueDayOfMonth(5);
+        setStartDate(new Date().toISOString().split('T')[0]);
+        setDueDate(calculateNearestDueDate(5));
+        setCategory('Kredit Gadget & Elektronik');
+        setNotes('');
+        setRecordInitialTransaction(false);
+      }
+      setSelectedAccountId(accounts[0]?.id || '');
+    }
+  }, [editingDebt, isOpen, accounts]);
 
   // Auto calculate remaining based on paid months or paid amount
   const handleTenorOrMonthsChange = (newTenor: number, newPaidMonths: number, monthly: number) => {
@@ -1629,6 +1741,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
     const isInst = type === 'installment';
 
     const debtData: DebtRecord = {
+      ...(editingDebt || {}),
       id: editingDebt?.id || `debt-${Date.now()}`,
       type,
       isInstallment: isInst,
@@ -1935,6 +2048,62 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
             </div>
           </div>
 
+          {/* Due Day of Month for Installment */}
+          {type === 'installment' && (
+            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-xs text-indigo-950 dark:text-indigo-200">
+                  Tanggal Jatuh Tempo Tiap Bulan (Tgl 1 - 31)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nearest = calculateNearestDueDate(dueDayOfMonth);
+                    setDueDate(nearest);
+                  }}
+                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Hitung Jatuh Tempo Terdekat</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={dueDayOfMonth}
+                  onChange={(e) => {
+                    const d = Math.min(31, Math.max(1, Number(e.target.value) || 1));
+                    setDueDayOfMonth(d);
+                    setDueDate(calculateNearestDueDate(d));
+                  }}
+                  className="w-20 px-3 py-1.5 bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-black text-center text-sm text-indigo-700 dark:text-indigo-300"
+                />
+                <div className="flex flex-wrap gap-1 flex-1">
+                  {[1, 5, 10, 15, 20, 25, 28, 30].map((dayNum) => (
+                    <button
+                      key={dayNum}
+                      type="button"
+                      onClick={() => {
+                        setDueDayOfMonth(dayNum);
+                        setDueDate(calculateNearestDueDate(dayNum));
+                      }}
+                      className={`text-[10px] px-2 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        dueDayOfMonth === dayNum
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                      }`}
+                    >
+                      Tgl {dayNum}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Dates */}
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -1947,15 +2116,37 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
               />
             </div>
             <div>
-              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Jatuh Tempo Terdekat</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-bold text-slate-700 dark:text-slate-300">
+                  {type === 'installment' ? 'Jatuh Tempo Terdekat' : 'Tanggal Jatuh Tempo'}
+                </label>
+              </div>
               <input
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white font-medium"
               />
             </div>
           </div>
+
+          {/* Due date preview helper */}
+          {dueDate && (
+            <div className="p-2.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium">
+                <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Jatuh tempo: <strong className="text-slate-900 dark:text-white">{formatDateFull(dueDate)}</strong></span>
+              </div>
+              {(() => {
+                const info = getNearestDueInfo(dueDayOfMonth, dueDate, 'unpaid');
+                return (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${info.badgeClass}`}>
+                    {info.statusLabel}
+                  </span>
+                );
+              })()}
+            </div>
+          )}
 
           {/* Notes */}
           <div>

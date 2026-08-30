@@ -90,6 +90,140 @@ export function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Menghitung tanggal jatuh tempo terdekat (nearest upcoming due date)
+ * berdasarkan dueDayOfMonth (1-31).
+ * Contoh: Jika hari ini 30 Agustus dan jatuh tempo tgl 5,
+ * maka jatuh tempo terdekat adalah 5 September.
+ */
+export function calculateNearestDueDate(
+  dueDayOfMonth?: number,
+  baseDate: Date = new Date()
+): string {
+  if (!dueDayOfMonth || dueDayOfMonth < 1 || dueDayOfMonth > 31) {
+    const y = baseDate.getFullYear();
+    const m = (baseDate.getMonth() + 1).toString().padStart(2, '0');
+    const d = baseDate.getDate().toString().padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const today = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+  const curY = today.getFullYear();
+  const curM = today.getMonth();
+
+  // 1. Cek tanggal jatuh tempo di bulan berjalan
+  const maxDaysThisMonth = new Date(curY, curM + 1, 0).getDate();
+  const validDayThisMonth = Math.min(dueDayOfMonth, maxDaysThisMonth);
+  const thisMonthDue = new Date(curY, curM, validDayThisMonth);
+
+  // Jika tanggal jatuh tempo di bulan ini masih hari ini atau masa depan, gunakan bulan ini
+  if (thisMonthDue >= today) {
+    const yStr = thisMonthDue.getFullYear();
+    const mStr = (thisMonthDue.getMonth() + 1).toString().padStart(2, '0');
+    const dStr = thisMonthDue.getDate().toString().padStart(2, '0');
+    return `${yStr}-${mStr}-${dStr}`;
+  }
+
+  // 2. Jika tanggal jatuh tempo bulan ini sudah lewat, maka jatuh tempo terdekat adalah di bulan depan
+  const nextM = curM + 1;
+  const nextY = curY + Math.floor(nextM / 12);
+  const normNextM = ((nextM % 12) + 12) % 12;
+  const maxDaysNextMonth = new Date(nextY, normNextM + 1, 0).getDate();
+  const validDayNextMonth = Math.min(dueDayOfMonth, maxDaysNextMonth);
+  const nextMonthDue = new Date(nextY, normNextM, validDayNextMonth);
+
+  const yStr = nextMonthDue.getFullYear();
+  const mStr = (normNextM + 1).toString().padStart(2, '0');
+  const dStr = nextMonthDue.getDate().toString().padStart(2, '0');
+  return `${yStr}-${mStr}-${dStr}`;
+}
+
+/**
+ * Menghasilkan informasi lengkap status jatuh tempo terdekat (countdown, label, badge)
+ */
+export function getNearestDueInfo(
+  dueDayOfMonth?: number,
+  explicitDueDate?: string,
+  status?: string
+) {
+  let targetDateStr = explicitDueDate;
+
+  // Jika ada dueDayOfMonth dan status belum lunas, sesuaikan ke tanggal jatuh tempo terdekat
+  if (dueDayOfMonth && status !== 'paid') {
+    targetDateStr = calculateNearestDueDate(dueDayOfMonth);
+  }
+
+  if (!targetDateStr) {
+    return {
+      dueDateStr: '',
+      formattedDate: '-',
+      daysRemaining: 0,
+      statusLabel: 'Tidak ada tanggal',
+      badgeClass: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
+      statusType: 'none' as const,
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const targetDate = new Date(targetDateStr + 'T00:00:00');
+  const diffTime = targetDate.getTime() - today.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  if (status === 'paid') {
+    return {
+      dueDateStr: targetDateStr,
+      formattedDate: formatDateIndo(targetDateStr),
+      daysRemaining: 0,
+      statusLabel: 'Sudah Lunas',
+      badgeClass: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+      statusType: 'paid' as const,
+    };
+  }
+
+  if (diffDays === 0) {
+    return {
+      dueDateStr: targetDateStr,
+      formattedDate: formatDateIndo(targetDateStr),
+      daysRemaining: 0,
+      statusLabel: 'Jatuh Tempo Hari Ini',
+      badgeClass: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse font-bold',
+      statusType: 'today' as const,
+    };
+  }
+
+  if (diffDays < 0) {
+    return {
+      dueDateStr: targetDateStr,
+      formattedDate: formatDateIndo(targetDateStr),
+      daysRemaining: diffDays,
+      statusLabel: `Lewat ${Math.abs(diffDays)} Hari`,
+      badgeClass: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 font-bold',
+      statusType: 'overdue' as const,
+    };
+  }
+
+  if (diffDays === 1) {
+    return {
+      dueDateStr: targetDateStr,
+      formattedDate: formatDateIndo(targetDateStr),
+      daysRemaining: 1,
+      statusLabel: 'Besok',
+      badgeClass: 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold',
+      statusType: 'tomorrow' as const,
+    };
+  }
+
+  return {
+    dueDateStr: targetDateStr,
+    formattedDate: formatDateIndo(targetDateStr),
+    daysRemaining: diffDays,
+    statusLabel: `${diffDays} Hari Lagi`,
+    badgeClass: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800',
+    statusType: 'upcoming' as const,
+  };
+}
+
 export const DEFAULT_CATEGORIES = {
   expense: [
     { name: 'Makanan & Minuman', icon: 'Utensils', color: '#F97316' },
