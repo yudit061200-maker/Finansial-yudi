@@ -915,18 +915,23 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                             <span className="text-xs font-black text-rose-700 dark:text-rose-300">
                               +{formatCurrency(lateInfo.totalLateFeePayable)}
                             </span>
+                            {lateInfo.isCapped && lateInfo.maxLateFee && (
+                              <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 px-1 py-0.2 rounded border border-amber-300 dark:border-amber-800 block mt-0.5">
+                                🔒 Maks Denda
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>
 
                       {lateInfo.formulaExplanation && (
-                        <div className="mt-2 pt-2 border-t border-rose-200/60 dark:border-rose-900/60 flex items-center justify-between text-[11px] text-rose-800 dark:text-rose-300">
+                        <div className="mt-2 pt-2 border-t border-rose-200/60 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-rose-800 dark:text-rose-300">
                           <span className="flex items-center gap-1">
-                            <Coins className="w-3 h-3 text-rose-500" />
+                            <Coins className="w-3 h-3 text-rose-500 shrink-0" />
                             <span>{lateInfo.formulaExplanation}</span>
                           </span>
-                          <span className="font-bold">
-                            Total Bayar: {formatCurrency(lateInfo.totalWithLateFee)}
+                          <span className="font-black text-rose-950 dark:text-rose-100 bg-white/70 dark:bg-rose-900/60 px-2 py-0.5 rounded-lg border border-rose-200/80">
+                            Total Tagihan Langsung: {formatCurrency(lateInfo.totalWithLateFee)}
                           </span>
                         </div>
                       )}
@@ -1239,29 +1244,36 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
 
             {/* LATE PAYMENT & PENALTY CALCULATION BOX */}
             {calculatedLateFeeInfo && (calculatedLateFeeInfo.isOverdue || (calculatedLateFeeInfo.calculatedFee ?? 0) > 0 || ((activePaymentDebt.accumulatedLateFee || 0) > 0)) && (
-              <div className="p-3.5 bg-rose-50/80 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/80 rounded-2xl text-xs space-y-2.5">
+              <div className="p-3.5 bg-rose-50/90 dark:bg-rose-950/70 border border-rose-200 dark:border-rose-900/80 rounded-2xl text-xs space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-bold text-rose-950 dark:text-rose-200">
-                    <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                    <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                     <span>Status Keterlambatan ({calculatedLateFeeInfo.daysOverdue} Hari)</span>
                   </div>
-                  <span className="text-[11px] font-extrabold text-rose-700 dark:text-rose-300">
-                    Est. Denda: {formatCurrency(calculatedLateFeeInfo.totalLateFeePayable)}
-                  </span>
+                  <div className="text-right">
+                    <span className="text-[11px] font-extrabold text-rose-700 dark:text-rose-300 block">
+                      Denda: {formatCurrency(calculatedLateFeeInfo.totalLateFeePayable)}
+                    </span>
+                    {calculatedLateFeeInfo.isCapped && calculatedLateFeeInfo.maxLateFee && (
+                      <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-800 inline-block">
+                        🔒 Maksimal Denda (Cap {formatCurrency(calculatedLateFeeInfo.maxLateFee)})
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {calculatedLateFeeInfo.formulaExplanation && (
-                  <p className="text-[11px] text-rose-800 dark:text-rose-300 bg-white/60 dark:bg-rose-900/40 p-2 rounded-xl border border-rose-200/50">
-                    💡 <strong>Aturan:</strong> {calculatedLateFeeInfo.formulaExplanation}
+                  <p className="text-[11px] text-rose-800 dark:text-rose-300 bg-white/70 dark:bg-rose-900/50 p-2 rounded-xl border border-rose-200/60">
+                    💡 <strong>Perhitungan:</strong> {calculatedLateFeeInfo.formulaExplanation}
                   </p>
                 )}
 
                 {/* Late Fee Handling Options */}
                 <div className="space-y-2 pt-1">
-                  <label className="flex items-center justify-between font-semibold text-rose-900 dark:text-rose-200 cursor-pointer">
+                  <label className="flex items-center justify-between font-bold text-rose-900 dark:text-rose-200 cursor-pointer bg-white/60 dark:bg-slate-900/60 p-2 rounded-xl border border-rose-200/50">
                     <span className="flex items-center gap-1.5">
                       <Coins className="w-3.5 h-3.5 text-rose-500" />
-                      <span>Sertakan Denda dalam Pembayaran</span>
+                      <span>Hitung & Sertakan Denda Langsung</span>
                     </span>
                     <input
                       type="checkbox"
@@ -1269,37 +1281,44 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                       onChange={(e) => {
                         const checked = e.target.checked;
                         setIncludeLateFee(checked);
-                        if (checked) setWaiveLateFee(false);
+                        if (checked) {
+                          setWaiveLateFee(false);
+                          setCustomLateFee(calculatedLateFeeInfo.totalLateFeePayable);
+                        }
                       }}
                       className="w-4 h-4 text-rose-600 rounded cursor-pointer"
                     />
                   </label>
 
                   {includeLateFee && (
-                    <div className="pl-5 space-y-2 animate-in fade-in">
-                      <div className="flex items-center gap-2">
-                        <label className="text-[11px] text-rose-700 dark:text-rose-300">Nominal Denda:</label>
-                        <input
-                          type="number"
-                          value={customLateFee}
-                          onChange={(e) => setCustomLateFee(Math.max(0, Number(e.target.value)))}
-                          className="w-32 px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-700 rounded-lg font-bold text-rose-700 dark:text-rose-300"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setCustomLateFee(calculatedLateFeeInfo.totalLateFeePayable)}
-                          className="text-[10px] text-rose-600 dark:text-rose-400 underline font-bold"
-                        >
-                          Reset Default
-                        </button>
+                    <div className="pl-2 space-y-1.5 animate-in fade-in">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-[11px] font-semibold text-rose-800 dark:text-rose-300">
+                          Nominal Denda Dibayar:
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            value={customLateFee}
+                            onChange={(e) => setCustomLateFee(Math.max(0, Number(e.target.value)))}
+                            className="w-28 px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-700 rounded-lg font-bold text-rose-700 dark:text-rose-300 text-right"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setCustomLateFee(calculatedLateFeeInfo.totalLateFeePayable)}
+                            className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline font-bold px-1.5 py-1 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-800 rounded-md cursor-pointer"
+                          >
+                            Reset
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
 
                   <label className="flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300 cursor-pointer pt-1 border-t border-rose-200/50">
-                    <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                    <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 text-[11px]">
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Bebaskan / Hapus Denda (Waive Penalty)</span>
+                      <span>Bebaskan / Hapus Denda (Keringanan)</span>
                     </span>
                     <input
                       type="checkbox"
@@ -1321,7 +1340,9 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nominal Pokok Pembayaran (Rp)</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Nominal Pokok Angsuran (Rp)
+                </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
                   <input
@@ -1346,9 +1367,14 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                           setPayingMonthNumber(nextM);
                           setPaymentNotes(`Pembayaran Angsuran Bulan Ke-${nextM}: ${activePaymentDebt.itemName || activePaymentDebt.title}`);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50"
+                        className="px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50 text-left"
                       >
-                        1 Bulan ({formatCurrency(activePaymentDebt.monthlyInstallment)})
+                        <div>1 Bulan Cicilan ({formatCurrency(activePaymentDebt.monthlyInstallment)})</div>
+                        {includeLateFee && customLateFee > 0 && (
+                          <div className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold">
+                            + Denda Langsung = {formatCurrency(Math.min(activePaymentDebt.monthlyInstallment || 0, activePaymentDebt.remainingAmount) + customLateFee)}
+                          </div>
+                        )}
                       </button>
 
                       {activePaymentDebt.remainingAmount >= (activePaymentDebt.monthlyInstallment * 2) && (
@@ -1361,25 +1387,14 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                             setPayingMonthNumber(nextM);
                             setPaymentNotes(`Pembayaran Angsuran 2 Bulan (Bln ${(activePaymentDebt.paidMonths || 0) + 1}-${nextM}): ${activePaymentDebt.itemName || activePaymentDebt.title}`);
                           }}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50"
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50 text-left"
                         >
-                          2 Bulan ({formatCurrency(activePaymentDebt.monthlyInstallment * 2)})
-                        </button>
-                      )}
-
-                      {activePaymentDebt.remainingAmount >= (activePaymentDebt.monthlyInstallment * 3) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const val = Math.min((activePaymentDebt.monthlyInstallment || 0) * 3, activePaymentDebt.remainingAmount);
-                            setPaymentAmount(val);
-                            const nextM = (activePaymentDebt.paidMonths || 0) + 3;
-                            setPayingMonthNumber(nextM);
-                            setPaymentNotes(`Pembayaran Angsuran 3 Bulan (Bln ${(activePaymentDebt.paidMonths || 0) + 1}-${nextM}): ${activePaymentDebt.itemName || activePaymentDebt.title}`);
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold transition-colors cursor-pointer border border-indigo-200/50"
-                        >
-                          3 Bulan ({formatCurrency(activePaymentDebt.monthlyInstallment * 3)})
+                          <div>2 Bulan ({formatCurrency(activePaymentDebt.monthlyInstallment * 2)})</div>
+                          {includeLateFee && customLateFee > 0 && (
+                            <div className="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold">
+                              + Denda Langsung = {formatCurrency((activePaymentDebt.monthlyInstallment * 2) + customLateFee)}
+                            </div>
+                          )}
                         </button>
                       )}
                     </>
@@ -1392,27 +1407,42 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                       setPayingMonthNumber(activePaymentDebt.tenorMonths);
                       setPaymentNotes(`Pelunasan Penuh: ${activePaymentDebt.itemName || activePaymentDebt.title}`);
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold transition-colors cursor-pointer border border-emerald-200/50"
+                    className="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold transition-colors cursor-pointer border border-emerald-200/50 text-left"
                   >
-                    Lunaskan Pokok ({formatCurrency(activePaymentDebt.remainingAmount)})
+                    <div>Lunaskan Pokok ({formatCurrency(activePaymentDebt.remainingAmount)})</div>
+                    {includeLateFee && customLateFee > 0 && (
+                      <div className="text-[10px] text-emerald-800 dark:text-emerald-300 font-extrabold">
+                        + Denda Langsung = {formatCurrency(activePaymentDebt.remainingAmount + customLateFee)}
+                      </div>
+                    )}
                   </button>
                 </div>
 
                 {/* Live Summary of Total Deduction (Pokok + Denda) */}
-                <div className="mt-2.5 p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/60 text-xs space-y-1.5">
+                <div className="mt-3 p-3.5 rounded-2xl bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/70 dark:to-purple-950/70 border-2 border-indigo-200 dark:border-indigo-800 text-xs space-y-1.5 shadow-xs">
                   <div className="flex justify-between text-slate-600 dark:text-slate-300">
-                    <span>Pokok Dibayar:</span>
+                    <span>Pokok Angsuran Dibayar:</span>
                     <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(paymentAmount)}</span>
                   </div>
                   {includeLateFee && customLateFee > 0 && (
                     <div className="flex justify-between text-rose-600 dark:text-rose-400 font-bold">
-                      <span>Denda Keterlambatan:</span>
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-rose-500" />
+                        <span>Denda Keterlambatan:</span>
+                      </span>
                       <span>+{formatCurrency(customLateFee)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-sm font-black pt-1.5 border-t border-indigo-200/60 dark:border-indigo-800 text-indigo-950 dark:text-indigo-200">
-                    <span>Total Uang Dikeluarkan:</span>
-                    <span className="text-indigo-600 dark:text-indigo-400">
+                  <div className="flex justify-between items-center text-sm font-black pt-2 border-t border-indigo-200/80 dark:border-indigo-800/80 text-indigo-950 dark:text-indigo-200">
+                    <div>
+                      <span className="block font-black text-xs uppercase tracking-wider text-indigo-900 dark:text-indigo-300">
+                        Total Harus Dibayar Langsung:
+                      </span>
+                      <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                        (Pokok {formatCurrency(paymentAmount)} {includeLateFee && customLateFee > 0 ? `+ Denda ${formatCurrency(customLateFee)}` : ''})
+                      </span>
+                    </div>
+                    <span className="text-base font-black text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-indigo-300 dark:border-indigo-700 shadow-xs">
                       {formatCurrency(paymentAmount + (includeLateFee ? customLateFee : 0))}
                     </span>
                   </div>
@@ -1939,6 +1969,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
   const [hasLateFeeRule, setHasLateFeeRule] = useState(true);
   const [lateFeeType, setLateFeeType] = useState<'daily_fixed' | 'daily_percent' | 'monthly_percent' | 'monthly_fixed'>('daily_percent');
   const [lateFeeValue, setLateFeeValue] = useState<number>(0.2);
+  const [maxLateFee, setMaxLateFee] = useState<number | undefined>(200000);
   const [gracePeriodDays, setGracePeriodDays] = useState<number>(0);
 
   // Synchronize state when editingDebt changes or modal opens
@@ -1974,6 +2005,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
         setHasLateFeeRule(editingDebt.hasLateFeeRule ?? true);
         setLateFeeType(editingDebt.lateFeeType || 'daily_percent');
         setLateFeeValue(editingDebt.lateFeeValue !== undefined ? editingDebt.lateFeeValue : 0.2);
+        setMaxLateFee(editingDebt.maxLateFee);
         setGracePeriodDays(editingDebt.gracePeriodDays || 0);
       } else {
         setType('installment');
@@ -1998,6 +2030,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
         setHasLateFeeRule(true);
         setLateFeeType('daily_percent');
         setLateFeeValue(0.2);
+        setMaxLateFee(200000);
         setGracePeriodDays(0);
       }
       setSelectedAccountId(accounts[0]?.id || '');
@@ -2058,6 +2091,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
       hasLateFeeRule,
       lateFeeType: hasLateFeeRule ? lateFeeType : undefined,
       lateFeeValue: hasLateFeeRule ? lateFeeValue : undefined,
+      maxLateFee: hasLateFeeRule && maxLateFee && maxLateFee > 0 ? maxLateFee : undefined,
       gracePeriodDays: hasLateFeeRule ? gracePeriodDays : undefined,
       payments: editingDebt?.payments || [],
       createdAt: editingDebt?.createdAt || new Date().toISOString(),
@@ -2485,6 +2519,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
                           setLateFeeType(preset.type);
                           setLateFeeValue(preset.value);
                           setGracePeriodDays(preset.gracePeriod);
+                          setMaxLateFee(preset.maxLateFee);
                         }}
                         className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-semibold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
                       >
@@ -2524,20 +2559,83 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2">
+                {/* Maksimal Denda & Masa Tenggang */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-bold text-slate-700 dark:text-slate-300">
+                        Maksimal Denda (Rp)
+                      </label>
+                    </div>
+                    <input
+                      type="number"
+                      step="5000"
+                      value={maxLateFee !== undefined ? maxLateFee : ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? undefined : Math.max(0, Number(e.target.value));
+                        setMaxLateFee(val);
+                      }}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-900 dark:text-white text-xs"
+                      placeholder="Opsional (tanpa batas)"
+                    />
+                  </div>
+
                   <div>
                     <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Masa Tenggang / Toleransi (Hari)
+                      Toleransi / Grace Period
                     </label>
                     <input
                       type="number"
                       min="0"
                       value={gracePeriodDays}
                       onChange={(e) => setGracePeriodDays(Math.max(0, Number(e.target.value)))}
-                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
-                      placeholder="0 (langsung denda saat lewat jatuh tempo)"
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-xs"
+                      placeholder="0 Hari"
                     />
                   </div>
+                </div>
+
+                {/* Quick Max Late Fee Pills */}
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mr-0.5">Pilihan Maks Denda:</span>
+                  <button
+                    type="button"
+                    onClick={() => setMaxLateFee(undefined)}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer ${
+                      maxLateFee === undefined
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                    }`}
+                  >
+                    Tanpa Batas
+                  </button>
+                  {[50000, 100000, 200000, 500000].map((cap) => (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => setMaxLateFee(cap)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer ${
+                        maxLateFee === cap
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                      }`}
+                    >
+                      Rp {formatRupiah(cap, false)}
+                    </button>
+                  ))}
+                  {monthlyInstallment > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMaxLateFee(monthlyInstallment)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer ${
+                        maxLateFee === monthlyInstallment
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                      }`}
+                    >
+                      1x Cicilan ({formatRupiah(monthlyInstallment, false)})
+                    </button>
+                  )}
                 </div>
               </div>
             )}

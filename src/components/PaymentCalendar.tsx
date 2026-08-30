@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { DebtRecord, Account, Transaction } from '../types/finance';
 import {
   formatRupiah,
@@ -31,6 +31,10 @@ import {
   Eye,
   CreditCard,
   Coins,
+  X,
+  TrendingUp,
+  TrendingDown,
+  Info,
 } from 'lucide-react';
 
 export type CalendarFilterType =
@@ -91,6 +95,48 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
   const [amountDisplayMode, setAmountDisplayMode] = useState<'full' | 'short'>('full');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [includeTransactions, setIncludeTransactions] = useState<boolean>(true);
+  const [popupModalDate, setPopupModalDate] = useState<string | null>(null);
+  const [popupTab, setPopupTab] = useState<'all' | 'transactions' | 'debts'>('all');
+
+  // Long press timer ref for mobile & desktop touch/mouse hold
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressActiveRef = useRef<boolean>(false);
+
+  const handlePointerDown = (dateStr: string) => {
+    isLongPressActiveRef.current = false;
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressActiveRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate(50);
+        } catch (e) {
+          // ignore
+        }
+      }
+      setPopupModalDate(dateStr);
+      setSelectedDateStr(dateStr);
+    }, 450);
+  };
+
+  const handlePointerUp = (dateStr: string) => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (!isLongPressActiveRef.current) {
+      setSelectedDateStr(dateStr);
+    }
+  };
+
+  const handlePointerCancel = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
 
   // Month navigation
   const handlePrevMonth = () => {
@@ -790,6 +836,48 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
     };
   }, [projectedBalanceByDate, selectedDateStr, totalCurrentBalance]);
 
+  // Popup Modal Events & Projection (for long-press / context view)
+  const popupEvents = useMemo(() => {
+    if (!popupModalDate) return [];
+    return calendarEvents.filter((ev) => ev.date === popupModalDate);
+  }, [calendarEvents, popupModalDate]);
+
+  const popupFilteredEvents = useMemo(() => {
+    if (!popupEvents.length) return [];
+    if (popupTab === 'transactions') {
+      return popupEvents.filter((e) => e.type === 'transaction');
+    }
+    if (popupTab === 'debts') {
+      return popupEvents.filter((e) => e.type !== 'transaction');
+    }
+    return popupEvents;
+  }, [popupEvents, popupTab]);
+
+  const popupProjection = useMemo(() => {
+    if (!popupModalDate) {
+      return {
+        projectedBalance: totalCurrentBalance,
+        dailyIncome: 0,
+        dailyExpense: 0,
+        netDaily: 0,
+        unpaidCount: 0,
+        paidCount: 0,
+        overdueCount: 0,
+      };
+    }
+    return (
+      projectedBalanceByDate.get(popupModalDate) || {
+        projectedBalance: totalCurrentBalance,
+        dailyIncome: 0,
+        dailyExpense: 0,
+        netDaily: 0,
+        unpaidCount: 0,
+        paidCount: 0,
+        overdueCount: 0,
+      }
+    );
+  }, [projectedBalanceByDate, popupModalDate, totalCurrentBalance]);
+
   // Monthly Quick Stats organized strictly into Lunas, Telat, Akan Datang, and Cash Projection
   const monthStats = useMemo(() => {
     const targetMonthStr = (currentMonth + 1).toString().padStart(2, '0');
@@ -1226,6 +1314,19 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
           </div>
         </div>
 
+        {/* Long-press tip helper */}
+        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+            <span>
+              <strong>Tips Interaksi:</strong> Klik & tahan (long press) pada tanggal untuk membuka <strong>popup list sisa uang & seluruh transaksi</strong>.
+            </span>
+          </div>
+          <span className="hidden sm:inline text-slate-400 text-[10px]">
+            Klik kanan atau tahan mouse / layar sentuh
+          </span>
+        </div>
+
         {/* Main Grid View */}
         {viewMode === 'grid' ? (
           <div className="space-y-2 overflow-x-auto">
@@ -1256,10 +1357,24 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                 const dayTotalAmount = cell.events.reduce((sum, e) => sum + e.amount, 0);
 
                 return (
-                  <button
+                  <div
                     key={`${cell.dateStr}-${idx}`}
-                    onClick={() => setSelectedDateStr(cell.dateStr)}
-                    className={`min-h-[130px] sm:min-h-[145px] p-2 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative overflow-hidden ${
+                    onClick={() => {
+                      if (!isLongPressActiveRef.current) {
+                        setSelectedDateStr(cell.dateStr);
+                      }
+                    }}
+                    onPointerDown={() => handlePointerDown(cell.dateStr)}
+                    onPointerUp={() => handlePointerUp(cell.dateStr)}
+                    onPointerLeave={handlePointerCancel}
+                    onPointerCancel={handlePointerCancel}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setPopupModalDate(cell.dateStr);
+                      setSelectedDateStr(cell.dateStr);
+                    }}
+                    title="Klik untuk memilih. Tekan & tahan untuk membuka popup rincian sisa uang & transaksi."
+                    className={`min-h-[130px] sm:min-h-[145px] p-2 rounded-2xl border text-left flex flex-col justify-between transition-all cursor-pointer relative overflow-hidden select-none group ${
                       isSelected
                         ? 'border-indigo-600 bg-indigo-50/90 dark:bg-indigo-950/80 ring-2 ring-indigo-500/50 shadow-md'
                         : isToday
@@ -1271,19 +1386,35 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                   >
                     {/* Top Day Number & Day Total Tagihan Badge */}
                     <div className="flex items-center justify-between w-full gap-1">
-                      <span
-                        className={`text-xs font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                          isToday
-                            ? 'bg-amber-500 text-white shadow-xs ring-2 ring-amber-300 dark:ring-amber-700'
-                            : isSelected
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : cell.isCurrentMonth
-                            ? 'text-slate-900 dark:text-white'
-                            : 'text-slate-400 dark:text-slate-600'
-                        }`}
-                      >
-                        {cell.dayNumber}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span
+                          className={`text-xs font-black w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                            isToday
+                              ? 'bg-amber-500 text-white shadow-xs ring-2 ring-amber-300 dark:ring-amber-700'
+                              : isSelected
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : cell.isCurrentMonth
+                              ? 'text-slate-900 dark:text-white'
+                              : 'text-slate-400 dark:text-slate-600'
+                          }`}
+                        >
+                          {cell.dayNumber}
+                        </span>
+
+                        {/* Quick Popup Eye Icon Button on Hover */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPopupModalDate(cell.dateStr);
+                            setSelectedDateStr(cell.dateStr);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                          title="Buka Popup Rincian Sisa Kas & Transaksi"
+                        >
+                          <Eye className="w-3 h-3" />
+                        </button>
+                      </div>
 
                       {/* DAILY TOTAL NOMINAL BADGE */}
                       {hasEvents && (
@@ -1439,7 +1570,7 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                         {formatAmount(cell.projection.projectedBalance)}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -1462,8 +1593,22 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                 return (
                   <div
                     key={ev.id}
-                    onClick={() => setSelectedDateStr(ev.date)}
-                    className={`p-4 rounded-2xl border flex items-center justify-between transition-all cursor-pointer ${
+                    onClick={() => {
+                      if (!isLongPressActiveRef.current) {
+                        setSelectedDateStr(ev.date);
+                      }
+                    }}
+                    onPointerDown={() => handlePointerDown(ev.date)}
+                    onPointerUp={() => handlePointerUp(ev.date)}
+                    onPointerLeave={handlePointerCancel}
+                    onPointerCancel={handlePointerCancel}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setPopupModalDate(ev.date);
+                      setSelectedDateStr(ev.date);
+                    }}
+                    title="Klik untuk memilih. Tekan & tahan untuk membuka popup list sisa uang & transaksi."
+                    className={`p-4 rounded-2xl border flex items-center justify-between transition-all cursor-pointer select-none group ${
                       ev.date === selectedDateStr
                         ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/50 shadow-sm'
                         : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300'
@@ -1471,7 +1616,7 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                   >
                     <div className="flex items-center gap-3.5">
                       <div
-                        className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold shadow-xs"
+                        className="w-11 h-11 rounded-2xl flex items-center justify-center font-bold shadow-xs shrink-0"
                         style={{ backgroundColor: `${ev.color}20`, color: ev.color }}
                       >
                         {ev.type === 'installment' ? (
@@ -1532,60 +1677,76 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <div className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-                        {formatRupiah(ev.amount)}
-                      </div>
-                      <div className="flex items-center justify-end gap-1.5 mt-1">
-                        {ev.lateFeeAmount && ev.lateFeeAmount > 0 && (
-                          <span className="text-[10px] font-extrabold text-rose-600 bg-rose-50 dark:bg-rose-950 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
-                            +Denda {formatRupiah(ev.lateFeeAmount)}
-                          </span>
-                        )}
-                        <span
-                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                            isTx
-                              ? txType === 'expense'
-                                ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
-                                : txType === 'income'
-                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                                : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
-                              : ev.status === 'paid'
-                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                              : ev.status === 'overdue'
-                              ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold'
-                              : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                          }`}
-                        >
-                          {isTx ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>
-                                {txType === 'expense'
-                                  ? 'Keluar'
-                                  : txType === 'income'
-                                  ? 'Masuk'
-                                  : 'Transfer'}
-                              </span>
-                            </>
-                          ) : ev.status === 'paid' ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>Lunas</span>
-                            </>
-                          ) : ev.status === 'overdue' ? (
-                            <>
-                              <AlertTriangle className="w-3 h-3" />
-                              <span>Telat ({ev.daysOverdue || 0} hari)</span>
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="w-3 h-3" />
-                              <span>Akan Datang</span>
-                            </>
+                    <div className="text-right flex items-center gap-3">
+                      <div>
+                        <div className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                          {formatRupiah(ev.amount)}
+                        </div>
+                        <div className="flex items-center justify-end gap-1.5 mt-1">
+                          {ev.lateFeeAmount && ev.lateFeeAmount > 0 && (
+                            <span className="text-[10px] font-extrabold text-rose-600 bg-rose-50 dark:bg-rose-950 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
+                              +Denda {formatRupiah(ev.lateFeeAmount)}
+                            </span>
                           )}
-                        </span>
+                          <span
+                            className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                              isTx
+                                ? txType === 'expense'
+                                  ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                  : txType === 'income'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                                : ev.status === 'paid'
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                : ev.status === 'overdue'
+                                ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 font-bold'
+                                : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                            }`}
+                          >
+                            {isTx ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>
+                                  {txType === 'expense'
+                                    ? 'Keluar'
+                                    : txType === 'income'
+                                    ? 'Masuk'
+                                    : 'Transfer'}
+                                </span>
+                              </>
+                            ) : ev.status === 'paid' ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Lunas</span>
+                              </>
+                            ) : ev.status === 'overdue' ? (
+                              <>
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>Telat ({ev.daysOverdue || 0} hari)</span>
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="w-3 h-3" />
+                                <span>Akan Datang</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
                       </div>
+
+                      {/* Quick Popup Button on List Row */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPopupModalDate(ev.date);
+                          setSelectedDateStr(ev.date);
+                        }}
+                        className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                        title="Buka Popup Rincian Sisa Kas & Transaksi Tanggal Ini"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -1898,6 +2059,347 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
           </div>
         )}
       </div>
+
+      {/* POPUP MODAL ON LONG PRESS / CLICK DATE: SISA UANG & DAFTAR TRANSAKSI */}
+      {popupModalDate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setPopupModalDate(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs uppercase font-black text-indigo-600 dark:text-indigo-400 tracking-wider">
+                    Rincian Tanggal & Sisa Kas
+                  </span>
+                  {popupModalDate === todayStr && (
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300">
+                      Hari Ini
+                    </span>
+                  )}
+                  {popupModalDate < todayStr && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      Riwayat Tanggal Lalu
+                    </span>
+                  )}
+                  {popupModalDate > todayStr && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                      Proyeksi Tanggal Mendatang
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white mt-1">
+                  {formatDateFull(popupModalDate)}
+                </h3>
+              </div>
+
+              <button
+                onClick={() => setPopupModalDate(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Tutup Modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              {/* Highlight Card: Perkiraan Sisa Saldo Kas */}
+              <div
+                className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  popupProjection.projectedBalance < 0
+                    ? 'bg-rose-50/90 dark:bg-rose-950/50 border-rose-200 dark:border-rose-900/60'
+                    : popupProjection.projectedBalance < 500000
+                    ? 'bg-amber-50/90 dark:bg-amber-950/50 border-amber-200 dark:border-amber-900/60'
+                    : 'bg-emerald-50/90 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-900/60'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <Coins className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Perkiraan Sisa Uang / Saldo Kas:</span>
+                  </div>
+                  <div
+                    className={`text-2xl sm:text-3xl font-black tracking-tight mt-1 ${
+                      popupProjection.projectedBalance < 0
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : popupProjection.projectedBalance < 500000
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-emerald-700 dark:text-emerald-300'
+                    }`}
+                  >
+                    {formatRupiah(popupProjection.projectedBalance)}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    {popupProjection.projectedBalance < 0
+                      ? '⚠️ Defisit: Saldo kas berpotensi minus jika semua tagihan jatuh tempo terbayar.'
+                      : popupProjection.projectedBalance < 500000
+                      ? '⚡ Saldo kas menipis (di bawah Rp 500.000).'
+                      : '✅ Posisi saldo kas sehat dan surplus.'}
+                  </p>
+                </div>
+
+                <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 sm:border-l border-slate-200/80 dark:border-slate-700/80 pt-2 sm:pt-0 sm:pl-4 shrink-0">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">
+                    Perubahan Kas Harian:
+                  </span>
+                  <span
+                    className={`text-sm font-black flex items-center gap-1 mt-0.5 ${
+                      popupProjection.netDaily > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : popupProjection.netDaily < 0
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : 'text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    {popupProjection.netDaily > 0 ? (
+                      <ArrowDownLeft className="w-3.5 h-3.5" />
+                    ) : popupProjection.netDaily < 0 ? (
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    ) : null}
+                    {popupProjection.netDaily > 0 ? '+' : ''}
+                    {formatRupiah(popupProjection.netDaily)}
+                  </span>
+                </div>
+              </div>
+
+              {/* 2-Col Cash Flow Breakdowns */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Uang Masuk / Piutang:
+                  </span>
+                  <div className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                    <ArrowDownLeft className="w-4 h-4 shrink-0" />
+                    <span className="truncate">+{formatRupiah(popupProjection.dailyIncome)}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Uang Keluar / Tagihan:
+                  </span>
+                  <div className="text-sm sm:text-base font-black text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1">
+                    <ArrowUpRight className="w-4 h-4 shrink-0" />
+                    <span className="truncate">-{formatRupiah(popupProjection.dailyExpense)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transaction & Debt List */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Daftar Transaksi & Tagihan ({popupEvents.length})
+                  </h4>
+
+                  {popupEvents.length > 0 && (
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-[10px] font-bold">
+                      <button
+                        onClick={() => setPopupTab('all')}
+                        className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                          popupTab === 'all'
+                            ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs font-black'
+                            : 'text-slate-400 hover:text-slate-700'
+                        }`}
+                      >
+                        Semua ({popupEvents.length})
+                      </button>
+                      <button
+                        onClick={() => setPopupTab('transactions')}
+                        className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                          popupTab === 'transactions'
+                            ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs font-black'
+                            : 'text-slate-400 hover:text-slate-700'
+                        }`}
+                      >
+                        Transaksi ({popupEvents.filter((e) => e.type === 'transaction').length})
+                      </button>
+                      <button
+                        onClick={() => setPopupTab('debts')}
+                        className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                          popupTab === 'debts'
+                            ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs font-black'
+                            : 'text-slate-400 hover:text-slate-700'
+                        }`}
+                      >
+                        Tagihan ({popupEvents.filter((e) => e.type !== 'transaction').length})
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {popupFilteredEvents.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400">
+                    <CalendarIcon className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Tidak ada transaksi atau tagihan di tanggal ini
+                    </p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      Saldo kas diperkirakan tetap {formatRupiah(popupProjection.projectedBalance)}.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+                    {popupFilteredEvents.map((item) => {
+                      const isTx = item.type === 'transaction';
+                      const txType = item.transactionRef?.type;
+                      const isPaid = item.status === 'paid';
+                      const isOverdue = item.status === 'overdue';
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                            isTx
+                              ? txType === 'expense'
+                                ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50'
+                                : txType === 'income'
+                                ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50'
+                                : 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50'
+                              : isPaid
+                              ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50'
+                              : isOverdue
+                              ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-900/60 font-semibold'
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0"
+                              style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                            >
+                              {item.type === 'installment' ? (
+                                <ShoppingBag className="w-4 h-4" />
+                              ) : item.type === 'payable' ? (
+                                <ArrowUpRight className="w-4 h-4" />
+                              ) : item.type === 'receivable' ? (
+                                <ArrowDownLeft className="w-4 h-4" />
+                              ) : txType === 'expense' ? (
+                                <ArrowUpRight className="w-4 h-4 text-rose-500" />
+                              ) : txType === 'income' ? (
+                                <ArrowDownLeft className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <ArrowLeftRight className="w-4 h-4 text-blue-500" />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h5 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                  {item.title}
+                                </h5>
+                                <span
+                                  className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase ${
+                                    isTx
+                                      ? txType === 'expense'
+                                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                        : txType === 'income'
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                        : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                                      : isPaid
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                      : isOverdue
+                                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                                      : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                                  }`}
+                                >
+                                  {isTx
+                                    ? txType === 'expense'
+                                      ? 'Keluar'
+                                      : txType === 'income'
+                                      ? 'Masuk'
+                                      : 'Transfer'
+                                    : isPaid
+                                    ? 'Lunas'
+                                    : isOverdue
+                                    ? 'Telat'
+                                    : 'Akan Datang'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                {item.subTitle}
+                                {item.transactionRef?.notes ? ` • ${item.transactionRef.notes}` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <div
+                              className={`text-sm font-black ${
+                                isTx
+                                  ? txType === 'expense'
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : txType === 'income'
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-blue-600 dark:text-blue-400'
+                                  : 'text-slate-900 dark:text-white'
+                              }`}
+                            >
+                              {isTx ? (txType === 'expense' ? '-' : txType === 'income' ? '+' : '') : ''}
+                              {formatRupiah(item.amount)}
+                            </div>
+
+                            {item.debtRef && !isPaid && (
+                              <button
+                                onClick={() => {
+                                  setPopupModalDate(null);
+                                  onOpenPaymentModal(item.debtRef!);
+                                }}
+                                className="mt-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+                              >
+                                Bayar →
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setPopupModalDate(null);
+                    onOpenAddTransaction();
+                  }}
+                  className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Catat Transaksi</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setPopupModalDate(null);
+                    onOpenAddDebt();
+                  }}
+                  className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Tagihan</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setPopupModalDate(null)}
+                className="px-4 py-1.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

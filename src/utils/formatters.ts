@@ -158,6 +158,8 @@ export interface LateFeeCalculationResult {
   formulaExplanation?: string;
   calculatedFee?: number;
   totalWithLateFee?: number;
+  maxLateFee?: number;
+  isCapped?: boolean;
 }
 
 /**
@@ -190,48 +192,53 @@ export function isDebtPaid(debt?: {
 export const LATE_FEE_PRESETS = [
   {
     id: 'spaylater',
-    name: 'Shopee PayLater (5% per bulan)',
+    name: 'Shopee PayLater (5% per bulan, Maks Rp 100rb)',
     provider: 'SpayLater',
     type: 'monthly_percent' as const,
     value: 5,
+    maxLateFee: 100000,
     gracePeriod: 0,
-    description: 'Denda keterlambatan 5% dari total tagihan bulanan per bulan terlambat',
+    description: 'Denda keterlambatan 5% dari total tagihan bulanan per bulan terlambat (Maks Rp 100.000)',
   },
   {
     id: 'kredivo',
-    name: 'Kredivo / Akulaku (0.2% per hari)',
+    name: 'Kredivo / Akulaku (0.2% per hari, Maks Rp 200rb)',
     provider: 'Kredivo / Akulaku',
     type: 'daily_percent' as const,
     value: 0.2,
+    maxLateFee: 200000,
     gracePeriod: 0,
-    description: 'Bunga denda 0.2% per hari kalender keterlambatan (sekitar 6%/bulan)',
+    description: 'Bunga denda 0.2% per hari kalender keterlambatan (Maksimal Rp 200.000)',
   },
   {
     id: 'leasing_motor',
-    name: 'Leasing Motor FIF/BAF (Rp 5.000/hari)',
+    name: 'Leasing FIF/BAF (Rp 5.000/hari, Toleransi 3 hr)',
     provider: 'Leasing Kendaraan',
     type: 'daily_fixed' as const,
     value: 5000,
+    maxLateFee: 150000,
     gracePeriod: 3,
-    description: 'Denda harian Rp 5.000 per hari setelah masa tenggang 3 hari',
+    description: 'Denda harian Rp 5.000 per hari setelah masa tenggang 3 hari (Maks Rp 150.000)',
   },
   {
     id: 'bank_card',
-    name: 'Kartu Kredit Bank (1% flat per bulan)',
+    name: 'Kartu Kredit Bank (1% per bulan, Maks Rp 100rb)',
     provider: 'Bank BCA / Mandiri / BNI',
     type: 'monthly_percent' as const,
     value: 1,
+    maxLateFee: 100000,
     gracePeriod: 0,
-    description: 'Denda 1% dari total tagihan jatuh tempo',
+    description: 'Denda 1% dari total tagihan jatuh tempo (Maksimal Rp 100.000)',
   },
   {
     id: 'flat_nominal',
-    name: 'Denda Flat Rp 50.000 per Bulan',
+    name: 'Denda Tetap Rp 50.000 per Bulan',
     provider: 'Lainnya',
     type: 'monthly_fixed' as const,
     value: 50000,
+    maxLateFee: 150000,
     gracePeriod: 0,
-    description: 'Biaya keterlambatan tetap Rp 50.000 per bulan',
+    description: 'Biaya keterlambatan tetap Rp 50.000 per bulan (Maks Rp 150.000)',
   },
 ];
 
@@ -255,6 +262,7 @@ export function calculateLateFeeAndOverdue(
     hasLateFeeRule?: boolean;
     lateFeeType?: 'daily_fixed' | 'daily_percent' | 'monthly_percent' | 'monthly_fixed';
     lateFeeValue?: number;
+    maxLateFee?: number;
     gracePeriodDays?: number;
     accumulatedLateFee?: number;
     waivedLateFee?: number;
@@ -282,6 +290,8 @@ export function calculateLateFeeAndOverdue(
       dueDateFormatted: debt.dueDate ? formatDateIndo(debt.dueDate) : 'Lunas',
       lateFeeDescription: 'Tagihan telah lunas.',
       ruleLabel: 'Lunas',
+      maxLateFee: debt.maxLateFee,
+      isCapped: false,
     };
   }
 
@@ -316,6 +326,8 @@ export function calculateLateFeeAndOverdue(
   }
 
   if (!targetDueDate || isNaN(targetDueDate.getTime())) {
+    const rawAccPayable = Math.max(0, (debt.accumulatedLateFee || 0) - (debt.waivedLateFee || 0));
+    const totalLateFeePayable = debt.maxLateFee && debt.maxLateFee > 0 ? Math.min(debt.maxLateFee, rawAccPayable) : rawAccPayable;
     return {
       isOverdue: false,
       daysOverdue: 0,
@@ -324,14 +336,16 @@ export function calculateLateFeeAndOverdue(
       penaltyAmount: 0,
       accumulatedLateFee: debt.accumulatedLateFee || 0,
       waivedLateFee: debt.waivedLateFee || 0,
-      totalLateFeePayable: Math.max(0, (debt.accumulatedLateFee || 0) - (debt.waivedLateFee || 0)),
+      totalLateFeePayable,
       monthlyInstallment: monthlyInst,
       baseAmountDue: baseDue,
-      totalAmountDueWithPenalty: baseDue + Math.max(0, (debt.accumulatedLateFee || 0) - (debt.waivedLateFee || 0)),
+      totalAmountDueWithPenalty: baseDue + totalLateFeePayable,
       dueDateStr: '',
       dueDateFormatted: 'Belum ditentukan',
       lateFeeDescription: 'Tanpa tanggal jatuh tempo',
       ruleLabel: 'Standar',
+      maxLateFee: debt.maxLateFee,
+      isCapped: debt.maxLateFee && debt.maxLateFee > 0 ? rawAccPayable >= debt.maxLateFee : false,
     };
   }
 
@@ -346,6 +360,7 @@ export function calculateLateFeeAndOverdue(
   const hasRule = debt.hasLateFeeRule ?? true; // Default true jika ada keterlambatan
   const lateFeeType = debt.lateFeeType || 'daily_fixed';
   const lateFeeValue = debt.lateFeeValue !== undefined ? debt.lateFeeValue : 5000;
+  const maxLateFee = debt.maxLateFee && debt.maxLateFee > 0 ? debt.maxLateFee : undefined;
 
   let calculatedPenalty = 0;
   let ruleLabel = '';
@@ -387,10 +402,23 @@ export function calculateLateFeeAndOverdue(
       : `Rp ${formatRupiah(lateFeeValue, false)}/bln`;
   }
 
+  let isCapped = false;
+  if (maxLateFee && calculatedPenalty > maxLateFee) {
+    calculatedPenalty = maxLateFee;
+    isCapped = true;
+  }
+
   const penaltyAmount = Math.round(calculatedPenalty);
   const accumulatedLateFee = debt.accumulatedLateFee || 0;
   const waivedLateFee = debt.waivedLateFee || 0;
-  const totalLateFeePayable = Math.max(0, penaltyAmount + accumulatedLateFee - waivedLateFee);
+  const rawTotalLateFee = Math.max(0, penaltyAmount + accumulatedLateFee - waivedLateFee);
+  
+  let totalLateFeePayable = rawTotalLateFee;
+  if (maxLateFee && rawTotalLateFee > maxLateFee) {
+    totalLateFeePayable = maxLateFee;
+    isCapped = true;
+  }
+
   const totalAmountDueWithPenalty = baseDue + totalLateFeePayable;
 
   let lateFeeDescription = '';
@@ -399,7 +427,8 @@ export function calculateLateFeeAndOverdue(
   } else if (daysOverdue <= gracePeriodDays) {
     lateFeeDescription = `Terlambat ${daysOverdue} hari, masih dalam masa tenggang (${gracePeriodDays} hari bebas denda).`;
   } else {
-    lateFeeDescription = `Terlambat ${daysOverdue} hari (${effectiveLateDays} hari dikenakan denda @ ${ruleLabel}). Total denda: Rp ${formatRupiah(totalLateFeePayable, false)}.`;
+    const capInfo = isCapped && maxLateFee ? ` [Maksimal Cap Rp ${formatRupiah(maxLateFee, false)}]` : '';
+    lateFeeDescription = `Terlambat ${daysOverdue} hari (${effectiveLateDays} hari dikenakan denda @ ${ruleLabel}${capInfo}). Total denda: Rp ${formatRupiah(totalLateFeePayable, false)}.`;
   }
 
   return {
@@ -421,6 +450,8 @@ export function calculateLateFeeAndOverdue(
     formulaExplanation: lateFeeDescription,
     calculatedFee: totalLateFeePayable,
     totalWithLateFee: totalAmountDueWithPenalty,
+    maxLateFee,
+    isCapped,
   };
 }
 

@@ -132,6 +132,7 @@ export interface DebtRecord {
   hasLateFeeRule?: boolean; // Aktifkan aturan perhitungan denda keterlambatan
   lateFeeType?: 'daily_fixed' | 'daily_percent' | 'monthly_percent' | 'monthly_fixed'; // Tipe denda
   lateFeeValue?: number; // Nilai denda (misal: Rp 5.000 / 0.2% / 5%)
+  maxLateFee?: number; // Batas Maksimal Nominal Denda Keterlambatan (Rp)
   gracePeriodDays?: number; // Masa tenggang sebelum denda berlaku (hari, misal: 0 atau 3 hari)
   accumulatedLateFee?: number; // Akumulasi denda yang belum dibayar
   waivedLateFee?: number; // Total denda yang telah dibebaskan
