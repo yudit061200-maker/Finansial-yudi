@@ -11,6 +11,7 @@ import {
   formatRupiah,
   formatRupiahShort,
   formatDateIndo,
+  isDebtPaid,
 } from '../utils/formatters';
 import {
   TrendingUp,
@@ -79,17 +80,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Debt & Receivable Stats
   const debtStats = useMemo(() => {
     const totalPayable = debts
-      .filter((d) => (d.type === 'payable' || d.type === 'installment' || d.isInstallment) && d.status !== 'paid')
+      .filter((d) => (d.type === 'payable' || d.type === 'installment' || d.isInstallment) && !isDebtPaid(d))
       .reduce((sum, d) => sum + d.remainingAmount, 0);
 
     const totalReceivable = debts
-      .filter((d) => d.type === 'receivable' && d.status !== 'paid')
+      .filter((d) => d.type === 'receivable' && !isDebtPaid(d))
       .reduce((sum, d) => sum + d.remainingAmount, 0);
 
-    const activeCount = debts.filter((d) => d.status !== 'paid').length;
+    const activeCount = debts.filter((d) => !isDebtPaid(d)).length;
 
     const urgentList = debts.filter((d) => {
-      if (d.status === 'paid' || !d.dueDate) return false;
+      if (isDebtPaid(d) || !d.dueDate) return false;
       const now = new Date();
       now.setHours(0, 0, 0, 0);
       const due = new Date(d.dueDate);

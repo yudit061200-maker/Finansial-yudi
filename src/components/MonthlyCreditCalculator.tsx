@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { DebtRecord, Account, Transaction } from '../types/finance';
-import { formatRupiah, formatDateIndo, getNearestDueInfo } from '../utils/formatters';
+import { formatRupiah, formatDateIndo, getNearestDueInfo, isDebtPaid } from '../utils/formatters';
 import {
   Calculator,
   ShoppingBag,
@@ -66,12 +66,12 @@ export const MonthlyCreditCalculator: React.FC<MonthlyCreditCalculatorProps> = (
   // Active Installments & Active Payables
   const activeInstallments = useMemo(() => {
     return debts.filter(
-      (d) => (d.type === 'installment' || d.isInstallment) && d.status !== 'paid'
+      (d) => (d.type === 'installment' || d.isInstallment) && !isDebtPaid(d)
     );
   }, [debts]);
 
   const activePayables = useMemo(() => {
-    return debts.filter((d) => d.type === 'payable' && d.status !== 'paid');
+    return debts.filter((d) => d.type === 'payable' && !isDebtPaid(d));
   }, [debts]);
 
   // Monthly breakdown calculation

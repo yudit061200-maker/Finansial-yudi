@@ -3,6 +3,7 @@ import {
   DebtRecord,
   DebtType,
   DebtStatus,
+  DebtPayment,
   Account,
   Transaction,
 } from '../types/finance';
@@ -13,6 +14,10 @@ import {
   formatDateFull,
   calculateNearestDueDate,
   getNearestDueInfo,
+  calculateLateFeeAndOverdue,
+  LATE_FEE_PRESETS,
+  LateFeeCalculationResult,
+  isDebtPaid,
 } from '../utils/formatters';
 import { MonthlyCreditCalculator } from './MonthlyCreditCalculator';
 import { PaymentCalendar } from './PaymentCalendar';
@@ -47,6 +52,11 @@ import {
   Info,
   CalendarDays,
   ListFilter,
+  AlertTriangle,
+  Timer,
+  Percent,
+  Coins,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface DebtReceivableProps {
@@ -69,10 +79,10 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   onAddTransaction,
 }) => {
   const [mainView, setMainView] = useState<'list' | 'calendar' | 'monthly_calculator'>(initialView);
-  const [activeTab, setActiveTab] = useState<'all' | 'installment' | 'payable' | 'receivable'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | DebtStatus>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'installment' | 'payable' | 'receivable' | 'overdue'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | DebtStatus | 'overdue'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'dueDate' | 'amount' | 'createdAt'>('dueDate');
+  const [sortBy, setSortBy] = useState<'dueDate' | 'amount' | 'createdAt' | 'lateDays'>('dueDate');
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,23 +99,28 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   const [syncWithTransaction, setSyncWithTransaction] = useState<boolean>(true);
   const [payingMonthNumber, setPayingMonthNumber] = useState<number | undefined>(undefined);
 
+  // Late Fee Payment Specific States
+  const [includeLateFee, setIncludeLateFee] = useState<boolean>(true);
+  const [customLateFee, setCustomLateFee] = useState<number>(0);
+  const [waiveLateFee, setWaiveLateFee] = useState<boolean>(false);
+
   // Expanded Payment History Accordions
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
 
-  // Summary Calculations
+  // Summary Calculations with Overdue Tracking
   const summary = useMemo(() => {
     const installments = debts.filter((d) => d.type === 'installment' || d.isInstallment);
     const totalInstallmentRemaining = installments
-      .filter((d) => d.status !== 'paid')
+      .filter((d) => !isDebtPaid(d))
       .reduce((sum, d) => sum + d.remainingAmount, 0);
     const totalInstallmentPaid = installments.reduce((sum, d) => sum + d.paidAmount, 0);
 
     const totalPayable = debts
-      .filter((d) => d.type === 'payable' && d.status !== 'paid')
+      .filter((d) => d.type === 'payable' && !isDebtPaid(d))
       .reduce((sum, d) => sum + d.remainingAmount, 0);
 
     const totalReceivable = debts
-      .filter((d) => d.type === 'receivable' && d.status !== 'paid')
+      .filter((d) => d.type === 'receivable' && !isDebtPaid(d))
       .reduce((sum, d) => sum + d.remainingAmount, 0);
 
     const totalPaidPayable = debts
@@ -119,10 +134,22 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     // Total Semua Kewajiban (Hutang Tunai + Kredit Barang)
     const totalAllLiabilities = totalPayable + totalInstallmentRemaining;
 
+    // Overdue Calculations
+    const overdueDebts = debts.filter((d) => {
+      if (isDebtPaid(d)) return false;
+      const late = calculateLateFeeAndOverdue(d);
+      return late.isOverdue;
+    });
+
+    const totalEstimatedLateFee = overdueDebts.reduce((sum, d) => {
+      const late = calculateLateFeeAndOverdue(d);
+      return sum + late.totalLateFeePayable;
+    }, 0);
+
     // Overdue or upcoming within 7 days based on nearest due date
     const urgentCount = debts.filter((d) => {
-      if (d.status === 'paid') return false;
-      const dueInfo = getNearestDueInfo(d.dueDayOfMonth, d.dueDate, d.status);
+      if (isDebtPaid(d)) return false;
+      const dueInfo = getNearestDueInfo(d.dueDayOfMonth, d.dueDate, d.status, d);
       if (!dueInfo.dueDateStr) return false;
       return dueInfo.daysRemaining <= 7;
     }).length;
@@ -137,7 +164,9 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       totalPaidPayable,
       totalPaidReceivable,
       urgentCount,
-      activeInstallmentCount: installments.filter((d) => d.status !== 'paid').length,
+      activeInstallmentCount: installments.filter((d) => !isDebtPaid(d)).length,
+      overdueCount: overdueDebts.length,
+      totalEstimatedLateFee,
     };
   }, [debts]);
 
@@ -145,15 +174,28 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   const filteredDebts = useMemo(() => {
     return debts
       .filter((d) => {
+        const isPaid = isDebtPaid(d);
+        const late = calculateLateFeeAndOverdue(d);
+
         if (activeTab === 'installment') {
           if (d.type !== 'installment' && !d.isInstallment) return false;
         } else if (activeTab === 'payable') {
           if (d.type !== 'payable') return false;
         } else if (activeTab === 'receivable') {
           if (d.type !== 'receivable') return false;
+        } else if (activeTab === 'overdue') {
+          if (isPaid || !late.isOverdue) return false;
         }
 
-        if (statusFilter !== 'all' && d.status !== statusFilter) return false;
+        if (statusFilter === 'overdue') {
+          if (isPaid || !late.isOverdue) return false;
+        } else if (statusFilter === 'paid') {
+          if (!isPaid) return false;
+        } else if (statusFilter === 'partial') {
+          if (isPaid || d.paidAmount === 0) return false;
+        } else if (statusFilter === 'unpaid') {
+          if (isPaid || d.paidAmount > 0) return false;
+        }
 
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
@@ -168,6 +210,11 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         return true;
       })
       .sort((a, b) => {
+        if (sortBy === 'lateDays') {
+          const lateA = calculateLateFeeAndOverdue(a).daysOverdue;
+          const lateB = calculateLateFeeAndOverdue(b).daysOverdue;
+          return lateB - lateA;
+        }
         if (sortBy === 'dueDate') {
           if (a.status !== 'paid' && b.status === 'paid') return -1;
           if (a.status === 'paid' && b.status !== 'paid') return 1;
@@ -192,19 +239,35 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   const handleOpenPaymentModal = (debt: DebtRecord, monthNum?: number) => {
     setActivePaymentDebt(debt);
     const isInst = debt.type === 'installment' || debt.isInstallment;
+    const late = calculateLateFeeAndOverdue(debt);
+
+    if (late.isOverdue && late.totalLateFeePayable > 0) {
+      setIncludeLateFee(true);
+      setCustomLateFee(late.totalLateFeePayable);
+      setWaiveLateFee(false);
+    } else {
+      setIncludeLateFee(false);
+      setCustomLateFee(0);
+      setWaiveLateFee(false);
+    }
 
     if (isInst && debt.monthlyInstallment && debt.monthlyInstallment > 0) {
       // Default to 1 month installment amount or remaining amount if less
       const nextMonth = (debt.paidMonths || 0) + 1;
       setPayingMonthNumber(monthNum || nextMonth);
       setPaymentAmount(Math.min(debt.monthlyInstallment, debt.remainingAmount));
-      setPaymentNotes(`Pembayaran Angsuran Bulan Ke-${monthNum || nextMonth}: ${debt.itemName || debt.title}`);
+      
+      const lateNote = late.isOverdue 
+        ? ` (Telat ${late.daysOverdue} Hari)` 
+        : '';
+      setPaymentNotes(`Pembayaran Angsuran Bulan Ke-${monthNum || nextMonth}${lateNote}: ${debt.itemName || debt.title}`);
     } else {
       setPayingMonthNumber(undefined);
       setPaymentAmount(debt.remainingAmount);
+      const lateNote = late.isOverdue ? ` (Telat ${late.daysOverdue} Hari)` : '';
       setPaymentNotes(
         debt.type === 'payable'
-          ? `Cicilan pelunasan hutang: ${debt.title}`
+          ? `Cicilan pelunasan hutang${lateNote}: ${debt.title}`
           : `Penerimaan pelunasan piutang: ${debt.title}`
       );
     }
@@ -219,6 +282,14 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     if (!activePaymentDebt || paymentAmount <= 0) return;
 
     const isInst = activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment;
+    const late = calculateLateFeeAndOverdue(activePaymentDebt, new Date(paymentDate));
+    
+    // Hitung denda yang dibayarkan dan yang dibebaskan
+    const isLate = late.isOverdue;
+    const daysLateCount = isLate ? late.daysOverdue : 0;
+    const paidPenalty = (isLate && includeLateFee && !waiveLateFee) ? customLateFee : 0;
+    const waivedPenalty = (isLate && waiveLateFee) ? (late.totalLateFeePayable || customLateFee) : 0;
+
     const newPaidAmount = activePaymentDebt.paidAmount + paymentAmount;
     const newRemainingAmount = Math.max(0, activePaymentDebt.totalAmount - newPaidAmount);
     const newStatus: DebtStatus = newRemainingAmount === 0 ? 'paid' : 'partial';
@@ -242,14 +313,17 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     }
 
     const currentMonthNum = isInst ? (payingMonthNumber || (activePaymentDebt.paidMonths || 0) + 1) : undefined;
-    const nextMonthNum = isInst ? (newPaidMonths < (activePaymentDebt.tenorMonths || 12) ? newPaidMonths + 1 : newPaidMonths) : undefined;
 
-    const newPaymentEntry = {
+    const newPaymentEntry: DebtPayment = {
       id: `pay-${Date.now()}`,
       date: paymentDate,
       amount: paymentAmount,
+      lateFeePaid: paidPenalty > 0 ? paidPenalty : undefined,
+      daysLate: daysLateCount > 0 ? daysLateCount : undefined,
+      isLatePayment: isLate,
+      waivedLateFee: waivedPenalty > 0 ? waivedPenalty : undefined,
       accountId: paymentAccountId,
-      notes: paymentNotes.trim() || (isInst ? `Cicilan Bulan Ke-${currentMonthNum || newPaidMonths}` : 'Pembayaran angsuran'),
+      notes: paymentNotes.trim() || (isInst ? `Cicilan Bulan Ke-${currentMonthNum || newPaidMonths}${isLate ? ' (Telat)' : ''}` : 'Pembayaran angsuran'),
       monthNumber: currentMonthNum,
     };
 
@@ -275,6 +349,8 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       paidMonths: isInst ? newPaidMonths : activePaymentDebt.paidMonths,
       status: newStatus,
       dueDate: newDueDate,
+      accumulatedLateFee: Math.max(0, (activePaymentDebt.accumulatedLateFee || 0) + (isLate && !includeLateFee && !waiveLateFee ? customLateFee : 0)),
+      waivedLateFee: (activePaymentDebt.waivedLateFee || 0) + waivedPenalty,
       payments: [...(activePaymentDebt.payments || []), newPaymentEntry],
     };
 
@@ -282,6 +358,8 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
 
     // Sync with financial transaction record linked to this payment
     if (syncWithTransaction && onAddTransaction && paymentAccountId) {
+      const totalOutflow = paymentAmount + paidPenalty;
+
       if (activePaymentDebt.type === 'receivable') {
         // Terima Pelunasan Piutang -> Pemasukan Kas/Bank
         await onAddTransaction({
@@ -295,15 +373,15 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
           source: 'manual',
         });
       } else {
-        // Bayar Hutang / Kredit Barang -> Pengeluaran Kas/Bank
+        // Bayar Hutang / Kredit Barang -> Pengeluaran Kas/Bank (Termasuk Denda jika dibayar)
         const itemLabel = isInst
-          ? `Bayar Cicilan: ${activePaymentDebt.itemName || activePaymentDebt.title} (Bulan ${currentMonthNum || newPaidMonths}/${activePaymentDebt.tenorMonths || 12})`
-          : `Bayar Hutang: ${activePaymentDebt.personName} (${activePaymentDebt.title})`;
+          ? `Bayar Cicilan: ${activePaymentDebt.itemName || activePaymentDebt.title} (Bln ${currentMonthNum || newPaidMonths}/${activePaymentDebt.tenorMonths || 12})${paidPenalty > 0 ? ` + Denda Rp ${formatRupiah(paidPenalty, false)}` : ''}`
+          : `Bayar Hutang: ${activePaymentDebt.personName} (${activePaymentDebt.title})${paidPenalty > 0 ? ` + Denda Rp ${formatRupiah(paidPenalty, false)}` : ''}`;
 
         await onAddTransaction({
           date: paymentDate,
           title: itemLabel,
-          amount: paymentAmount,
+          amount: totalOutflow,
           type: 'expense',
           category: 'Tagihan & Utilitas',
           accountId: paymentAccountId,
@@ -353,7 +431,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   };
 
   const getDueStatusBadge = (debt: DebtRecord) => {
-    const dueInfo = getNearestDueInfo(debt.dueDayOfMonth, debt.dueDate, debt.status);
+    const dueInfo = getNearestDueInfo(debt.dueDayOfMonth, debt.dueDate, debt.status, debt);
 
     if (dueInfo.statusType === 'paid') {
       return (
@@ -635,6 +713,17 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 <ArrowDownLeft className="w-3.5 h-3.5" />
                 <span>Piutang ({debts.filter((d) => d.type === 'receivable').length})</span>
               </button>
+              {summary.overdueCount > 0 && (
+                <button
+                  onClick={() => setActiveTab('overdue')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 animate-pulse ${
+                    activeTab === 'overdue' ? 'bg-rose-600 text-white shadow-xs' : 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 hover:bg-rose-200'
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Telat Bayar ({summary.overdueCount})</span>
+                </button>
+              )}
             </div>
 
             {/* Middle: Search & Filter */}
@@ -658,6 +747,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 <option value="all">Semua Status</option>
                 <option value="unpaid">Belum Lunas</option>
                 <option value="partial">Dicicil Sebagian</option>
+                <option value="overdue">⚠️ Telat Bayar (Overdue)</option>
                 <option value="paid">Sudah Lunas</option>
               </select>
             </div>
@@ -710,6 +800,9 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
             const isPayable = debt.type === 'payable';
             const isReceivable = debt.type === 'receivable';
 
+            const lateInfo = calculateLateFeeAndOverdue(debt);
+            const isOverdueDebt = debt.status !== 'paid' && lateInfo.isOverdue;
+
             const tenor = debt.tenorMonths || 12;
             const paidMonths = debt.paidMonths || 0;
             const remainingMonths = Math.max(0, tenor - paidMonths);
@@ -723,6 +816,8 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 className={`p-5 rounded-3xl bg-white dark:bg-slate-900 border transition-all duration-200 shadow-xs flex flex-col justify-between ${
                   debt.status === 'paid'
                     ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 opacity-90'
+                    : isOverdueDebt
+                    ? 'border-rose-300 dark:border-rose-800 ring-2 ring-rose-100 dark:ring-rose-950/40 bg-gradient-to-b from-rose-50/30 to-transparent dark:from-rose-950/20'
                     : isInstallment
                     ? 'border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700'
                     : isPayable
@@ -736,7 +831,9 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                     <div className="flex items-center gap-2.5">
                       <div
                         className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
-                          isInstallment
+                          isOverdueDebt
+                            ? 'bg-rose-100 dark:bg-rose-950 border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-300'
+                            : isInstallment
                             ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200/60 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400'
                             : isPayable
                             ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/60 dark:border-rose-800 text-rose-600 dark:text-rose-400'
@@ -792,6 +889,50 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                     )}
                   </div>
 
+                  {/* LATE PAYMENT & PENALTY ALERT BANNER */}
+                  {isOverdueDebt && (
+                    <div className="mt-3 p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 text-xs animate-in fade-in">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-rose-950 dark:text-rose-200 block">
+                              Terlambat Pembayaran {lateInfo.daysOverdue} Hari
+                            </span>
+                            <span className="text-[11px] text-rose-700 dark:text-rose-300">
+                              Jatuh tempo: {lateInfo.dueDateFormatted}
+                            </span>
+                          </div>
+                        </div>
+
+                        {lateInfo.totalLateFeePayable > 0 && (
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase font-bold text-rose-500 block">
+                              Denda Berjalan:
+                            </span>
+                            <span className="text-xs font-black text-rose-700 dark:text-rose-300">
+                              +{formatCurrency(lateInfo.totalLateFeePayable)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {lateInfo.formulaExplanation && (
+                        <div className="mt-2 pt-2 border-t border-rose-200/60 dark:border-rose-900/60 flex items-center justify-between text-[11px] text-rose-800 dark:text-rose-300">
+                          <span className="flex items-center gap-1">
+                            <Coins className="w-3 h-3 text-rose-500" />
+                            <span>{lateInfo.formulaExplanation}</span>
+                          </span>
+                          <span className="font-bold">
+                            Total Bayar: {formatCurrency(lateInfo.totalWithLateFee)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* SPECIAL SECTION: Item Installment Months Tracker */}
                   {isInstallment && (
                     <div className="mt-3.5 p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60">
@@ -813,20 +954,32 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                           const monthIdx = index + 1;
                           const isPaid = monthIdx <= paidMonths;
                           const isCurrentNext = monthIdx === paidMonths + 1;
+                          const isOverduePill = isCurrentNext && isOverdueDebt;
 
                           return (
                             <div
                               key={monthIdx}
-                              title={`Bulan ${monthIdx}: ${isPaid ? 'Sudah Dibayar' : isCurrentNext ? 'Jatuh Tempo Berikutnya' : 'Belum Dibayar'}`}
+                              title={`Bulan ${monthIdx}: ${
+                                isPaid
+                                  ? 'Sudah Dibayar'
+                                  : isOverduePill
+                                  ? `Terlambat ${lateInfo.daysOverdue} Hari`
+                                  : isCurrentNext
+                                  ? 'Jatuh Tempo Berikutnya'
+                                  : 'Belum Dibayar'
+                              }`}
                               className={`h-6 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
                                 isPaid
                                   ? 'bg-emerald-500 text-white shadow-2xs'
+                                  : isOverduePill
+                                  ? 'bg-rose-600 text-white border border-rose-700 ring-2 ring-rose-300 animate-pulse'
                                   : isCurrentNext
                                   ? 'bg-amber-400 text-amber-950 border border-amber-500 ring-2 ring-amber-300 animate-pulse'
                                   : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700'
                               }`}
                             >
                               {isPaid && <Check className="w-2.5 h-2.5" />}
+                              {isOverduePill && <AlertTriangle className="w-2.5 h-2.5" />}
                               <span>Bln {monthIdx}</span>
                             </div>
                           );
@@ -891,8 +1044,8 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                     <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 font-semibold">
                       <span>Mulai: {debt.startDate ? formatDateIndo(debt.startDate) : '-'}</span>
                       {debt.status !== 'paid' ? (
-                        <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-1">
-                          <Calendar className="w-3 h-3 text-indigo-500" />
+                        <span className={`font-bold flex items-center gap-1 ${isOverdueDebt ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                          {isOverdueDebt ? <AlertTriangle className="w-3 h-3 text-rose-500" /> : <Calendar className="w-3 h-3 text-indigo-500" />}
                           <span>Jatuh tempo: {getNearestDueInfo(debt.dueDayOfMonth, debt.dueDate, debt.status).formattedDate}</span>
                         </span>
                       ) : (
@@ -909,7 +1062,9 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                       <button
                         onClick={() => handleOpenPaymentModal(debt)}
                         className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer text-white ${
-                          isInstallment
+                          isOverdueDebt
+                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200 dark:shadow-none animate-pulse'
+                            : isInstallment
                             ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 dark:shadow-none'
                             : isPayable
                             ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100 dark:shadow-none'
@@ -919,9 +1074,13 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                         <CreditCard className="w-3.5 h-3.5" />
                         <span>
                           {isInstallment
-                            ? `Bayar Cicilan Bln ke-${paidMonths + 1}`
+                            ? isOverdueDebt
+                              ? `Bayar Cicilan (Telat ${lateInfo.daysOverdue} Hari)`
+                              : `Bayar Cicilan Bln ke-${paidMonths + 1}`
                             : isPayable
-                            ? 'Bayar Angsuran'
+                            ? isOverdueDebt
+                              ? `Bayar Hutang (Telat ${lateInfo.daysOverdue} Hari)`
+                              : 'Bayar Angsuran'
                             : 'Terima Pembayaran'}
                         </span>
                       </button>
@@ -983,22 +1142,33 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                       </button>
 
                       {isHistoryExpanded && (
-                        <div className="mt-1.5 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        <div className="mt-1.5 space-y-1.5 max-h-48 overflow-y-auto pr-1">
                           {debt.payments.map((pay) => (
                             <div
                               key={pay.id}
-                              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-[11px] flex items-center justify-between"
+                              className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-[11px] flex items-center justify-between"
                             >
                               <div>
-                                <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                                <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
                                   {pay.monthNumber && (
                                     <span className="px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[9px] font-extrabold">
                                       Bulan {pay.monthNumber}
                                     </span>
                                   )}
                                   <span>{formatCurrency(pay.amount)}</span>
+                                  {pay.lateFeePaid && pay.lateFeePaid > 0 && (
+                                    <span className="px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-[9px] font-extrabold flex items-center gap-0.5">
+                                      <AlertTriangle className="w-2.5 h-2.5" />
+                                      +Denda {formatCurrency(pay.lateFeePaid)} ({pay.daysLate} hr)
+                                    </span>
+                                  )}
+                                  {pay.waivedLateFee && pay.waivedLateFee > 0 && (
+                                    <span className="px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[9px] font-extrabold">
+                                      Denda Dibebaskan
+                                    </span>
+                                  )}
                                 </div>
-                                <div className="text-[10px] text-slate-400 dark:text-slate-500">{pay.notes || pay.date}</div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{pay.notes || pay.date}</div>
                               </div>
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{pay.date}</span>
                             </div>
@@ -1017,7 +1187,9 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   )}
 
       {/* MODAL: Payment / Angsuran Confirmation */}
-      {isPaymentModalOpen && activePaymentDebt && (
+      {isPaymentModalOpen && activePaymentDebt && (() => {
+        const calculatedLateFeeInfo = calculateLateFeeAndOverdue(activePaymentDebt, new Date(paymentDate));
+        return (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 transition-colors">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -1052,7 +1224,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(activePaymentDebt.paidAmount)}</span>
               </div>
               <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                <span>Sisa Belum Dibayar:</span>
+                <span>Sisa Pokok Belum Dibayar:</span>
                 <span className="font-bold text-rose-600 dark:text-rose-400">{formatCurrency(activePaymentDebt.remainingAmount)}</span>
               </div>
               {(activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment) && (
@@ -1065,9 +1237,91 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
               )}
             </div>
 
+            {/* LATE PAYMENT & PENALTY CALCULATION BOX */}
+            {calculatedLateFeeInfo && (calculatedLateFeeInfo.isOverdue || (calculatedLateFeeInfo.calculatedFee ?? 0) > 0 || ((activePaymentDebt.accumulatedLateFee || 0) > 0)) && (
+              <div className="p-3.5 bg-rose-50/80 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/80 rounded-2xl text-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-rose-950 dark:text-rose-200">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                    <span>Status Keterlambatan ({calculatedLateFeeInfo.daysOverdue} Hari)</span>
+                  </div>
+                  <span className="text-[11px] font-extrabold text-rose-700 dark:text-rose-300">
+                    Est. Denda: {formatCurrency(calculatedLateFeeInfo.totalLateFeePayable)}
+                  </span>
+                </div>
+
+                {calculatedLateFeeInfo.formulaExplanation && (
+                  <p className="text-[11px] text-rose-800 dark:text-rose-300 bg-white/60 dark:bg-rose-900/40 p-2 rounded-xl border border-rose-200/50">
+                    💡 <strong>Aturan:</strong> {calculatedLateFeeInfo.formulaExplanation}
+                  </p>
+                )}
+
+                {/* Late Fee Handling Options */}
+                <div className="space-y-2 pt-1">
+                  <label className="flex items-center justify-between font-semibold text-rose-900 dark:text-rose-200 cursor-pointer">
+                    <span className="flex items-center gap-1.5">
+                      <Coins className="w-3.5 h-3.5 text-rose-500" />
+                      <span>Sertakan Denda dalam Pembayaran</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={includeLateFee}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIncludeLateFee(checked);
+                        if (checked) setWaiveLateFee(false);
+                      }}
+                      className="w-4 h-4 text-rose-600 rounded cursor-pointer"
+                    />
+                  </label>
+
+                  {includeLateFee && (
+                    <div className="pl-5 space-y-2 animate-in fade-in">
+                      <div className="flex items-center gap-2">
+                        <label className="text-[11px] text-rose-700 dark:text-rose-300">Nominal Denda:</label>
+                        <input
+                          type="number"
+                          value={customLateFee}
+                          onChange={(e) => setCustomLateFee(Math.max(0, Number(e.target.value)))}
+                          className="w-32 px-2.5 py-1 text-xs bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-700 rounded-lg font-bold text-rose-700 dark:text-rose-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCustomLateFee(calculatedLateFeeInfo.totalLateFeePayable)}
+                          className="text-[10px] text-rose-600 dark:text-rose-400 underline font-bold"
+                        >
+                          Reset Default
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="flex items-center justify-between font-semibold text-slate-700 dark:text-slate-300 cursor-pointer pt-1 border-t border-rose-200/50">
+                    <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Bebaskan / Hapus Denda (Waive Penalty)</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={waiveLateFee}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setWaiveLateFee(checked);
+                        if (checked) {
+                          setIncludeLateFee(false);
+                          setCustomLateFee(0);
+                        }
+                      }}
+                      className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nominal Pembayaran (Rp)</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nominal Pokok Pembayaran (Rp)</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-slate-500">Rp</span>
                   <input
@@ -1140,8 +1394,28 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                     }}
                     className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold transition-colors cursor-pointer border border-emerald-200/50"
                   >
-                    Lunaskan Semua ({formatCurrency(activePaymentDebt.remainingAmount)})
+                    Lunaskan Pokok ({formatCurrency(activePaymentDebt.remainingAmount)})
                   </button>
+                </div>
+
+                {/* Live Summary of Total Deduction (Pokok + Denda) */}
+                <div className="mt-2.5 p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/60 text-xs space-y-1.5">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                    <span>Pokok Dibayar:</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(paymentAmount)}</span>
+                  </div>
+                  {includeLateFee && customLateFee > 0 && (
+                    <div className="flex justify-between text-rose-600 dark:text-rose-400 font-bold">
+                      <span>Denda Keterlambatan:</span>
+                      <span>+{formatCurrency(customLateFee)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-black pt-1.5 border-t border-indigo-200/60 dark:border-indigo-800 text-indigo-950 dark:text-indigo-200">
+                    <span>Total Uang Dikeluarkan:</span>
+                    <span className="text-indigo-600 dark:text-indigo-400">
+                      {formatCurrency(paymentAmount + (includeLateFee ? customLateFee : 0))}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Live Preview of After Payment State */}
@@ -1238,7 +1512,8 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* MODAL: Full Form Modal (Tambah/Edit Kredit & Hutang) */}
       <DebtFormModal
@@ -1660,6 +1935,12 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
   const [recordInitialTransaction, setRecordInitialTransaction] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || '');
 
+  // Late Fee Configuration State
+  const [hasLateFeeRule, setHasLateFeeRule] = useState(true);
+  const [lateFeeType, setLateFeeType] = useState<'daily_fixed' | 'daily_percent' | 'monthly_percent' | 'monthly_fixed'>('daily_percent');
+  const [lateFeeValue, setLateFeeValue] = useState<number>(0.2);
+  const [gracePeriodDays, setGracePeriodDays] = useState<number>(0);
+
   // Synchronize state when editingDebt changes or modal opens
   useEffect(() => {
     if (isOpen) {
@@ -1688,6 +1969,12 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
         setCategory(editingDebt.category || (dType === 'installment' ? 'Kredit Gadget & Elektronik' : dType === 'payable' ? 'Cicilan Bank' : 'Pinjaman Teman'));
         setNotes(editingDebt.notes || '');
         setRecordInitialTransaction(false);
+
+        // Late fee fields
+        setHasLateFeeRule(editingDebt.hasLateFeeRule ?? true);
+        setLateFeeType(editingDebt.lateFeeType || 'daily_percent');
+        setLateFeeValue(editingDebt.lateFeeValue !== undefined ? editingDebt.lateFeeValue : 0.2);
+        setGracePeriodDays(editingDebt.gracePeriodDays || 0);
       } else {
         setType('installment');
         setItemName('');
@@ -1706,6 +1993,12 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
         setCategory('Kredit Gadget & Elektronik');
         setNotes('');
         setRecordInitialTransaction(false);
+
+        // Default late fee enabled for installment
+        setHasLateFeeRule(true);
+        setLateFeeType('daily_percent');
+        setLateFeeValue(0.2);
+        setGracePeriodDays(0);
       }
       setSelectedAccountId(accounts[0]?.id || '');
     }
@@ -1762,6 +2055,10 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
       status: calculatedStatus,
       category,
       notes: notes.trim() || undefined,
+      hasLateFeeRule,
+      lateFeeType: hasLateFeeRule ? lateFeeType : undefined,
+      lateFeeValue: hasLateFeeRule ? lateFeeValue : undefined,
+      gracePeriodDays: hasLateFeeRule ? gracePeriodDays : undefined,
       payments: editingDebt?.payments || [],
       createdAt: editingDebt?.createdAt || new Date().toISOString(),
     };
@@ -2147,6 +2444,104 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
               })()}
             </div>
           )}
+
+          {/* LATE FEE CONFIGURATION SECTION */}
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                    Fitur Denda & Keterlambatan Pembayaran
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Otomatis hitung denda jika pembayaran melewati jatuh tempo
+                  </span>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={hasLateFeeRule}
+                onChange={(e) => setHasLateFeeRule(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+              />
+            </div>
+
+            {hasLateFeeRule && (
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-2.5 animate-in fade-in text-xs">
+                {/* Presets */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Preset Aturan Denda Populer:
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {LATE_FEE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id || preset.name}
+                        type="button"
+                        onClick={() => {
+                          setLateFeeType(preset.type);
+                          setLateFeeValue(preset.value);
+                          setGracePeriodDays(preset.gracePeriod);
+                        }}
+                        className="px-2 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-500 rounded-lg text-[10px] font-semibold text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Jenis Denda</label>
+                    <select
+                      value={lateFeeType}
+                      onChange={(e) => setLateFeeType(e.target.value as any)}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium cursor-pointer"
+                    >
+                      <option value="daily_percent">Persentase Harian (% / hari)</option>
+                      <option value="daily_fixed">Nominal Tetap Harian (Rp / hari)</option>
+                      <option value="monthly_percent">Persentase Bulanan (% / bulan)</option>
+                      <option value="monthly_fixed">Nominal Tetap Bulanan (Rp / bulan)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      {lateFeeType.includes('percent') ? 'Nilai Persentase (%)' : 'Nominal Denda (Rp)'}
+                    </label>
+                    <input
+                      type="number"
+                      step={lateFeeType.includes('percent') ? '0.01' : '1000'}
+                      value={lateFeeValue || ''}
+                      onChange={(e) => setLateFeeValue(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-900 dark:text-white"
+                      placeholder={lateFeeType.includes('percent') ? '0.2' : '5000'}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Masa Tenggang / Toleransi (Hari)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={gracePeriodDays}
+                      onChange={(e) => setGracePeriodDays(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white"
+                      placeholder="0 (langsung denda saat lewat jatuh tempo)"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Notes */}
           <div>

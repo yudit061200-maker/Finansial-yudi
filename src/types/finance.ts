@@ -92,6 +92,10 @@ export interface DebtPayment {
   notes?: string;
   transactionId?: string;
   monthNumber?: number; // Cicilan Bulan Ke- (misal: Bulan ke-1, Bulan ke-2, dst.)
+  lateFeePaid?: number; // Denda Keterlambatan yang dibayar (Rp)
+  daysLate?: number; // Jumlah hari keterlambatan saat pembayaran
+  isLatePayment?: boolean; // Apakah pembayaran ini mengalami keterlambatan
+  waivedLateFee?: number; // Denda yang dibebaskan/diberi diskon keringanan (Rp)
 }
 
 export interface DebtRecord {
@@ -123,6 +127,14 @@ export interface DebtRecord {
   interestRatePercent?: number; // Suku Bunga per Bulan (%) atau per Tahun
   adminFee?: number; // Biaya Admin / Layanan Bulanan
   dueDayOfMonth?: number; // Tanggal Jatuh Tempo Setiap Bulan (misal: tanggal 5 atau 25)
+
+  // Fitur Khusus Telat Pembayaran & Denda Keterlambatan (Late Payment & Penalty)
+  hasLateFeeRule?: boolean; // Aktifkan aturan perhitungan denda keterlambatan
+  lateFeeType?: 'daily_fixed' | 'daily_percent' | 'monthly_percent' | 'monthly_fixed'; // Tipe denda
+  lateFeeValue?: number; // Nilai denda (misal: Rp 5.000 / 0.2% / 5%)
+  gracePeriodDays?: number; // Masa tenggang sebelum denda berlaku (hari, misal: 0 atau 3 hari)
+  accumulatedLateFee?: number; // Akumulasi denda yang belum dibayar
+  waivedLateFee?: number; // Total denda yang telah dibebaskan
 }
 
 export interface ParsedReceiptData {
