@@ -513,7 +513,7 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
     return accounts.reduce((acc, a) => acc + (Number(a.balance) || 0), 0);
   }, [accounts]);
 
-  // Projected Cash Balance for every date in calendar view
+  // Projected Cash Balance for every date in calendar view based on real liquid accounts
   const projectedBalanceByDate = useMemo(() => {
     const map = new Map<
       string,
@@ -530,119 +530,184 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
 
     const nowStr = new Date().toISOString().split('T')[0];
 
-    // Collect all chronological dates in the month view
+    // Collect all chronological dates in the month view & calendar grid
     const allDatesSet = new Set<string>();
     calendarEvents.forEach((e) => allDatesSet.add(e.date));
 
-    // Also include all days of current month & grid
+    // Days in current viewed month
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     for (let d = 1; d <= daysInMonth; d++) {
       const mStr = (currentMonth + 1).toString().padStart(2, '0');
       const dStr = d.toString().padStart(2, '0');
       allDatesSet.add(`${currentYear}-${mStr}-${dStr}`);
     }
+    // Also ensure today is in the set
+    allDatesSet.add(nowStr);
 
     // Sort all dates chronologically
     const sortedDates = Array.from(allDatesSet).sort();
 
-    // Calculate daily flow for each date
-    const dailyFlows: Record<string, { income: number; expense: number; unpaidCount: number; paidCount: number; overdueCount: number }> = {};
-    sortedDates.forEach((dateStr) => {
-      dailyFlows[dateStr] = { income: 0, expense: 0, unpaidCount: 0, paidCount: 0, overdueCount: 0 };
+    // Categorize daily movements for each date
+    const dailyData: Record<
+      string,
+      {
+        executedIncome: number;
+        executedExpense: number;
+        pendingIncome: number;
+        pendingExpense: number;
+        unpaidCount: number;
+        paidCount: number;
+        overdueCount: number;
+      }
+    > = {};
+
+    sortedDates.forEach((dStr) => {
+      dailyData[dStr] = {
+        executedIncome: 0,
+        executedExpense: 0,
+        pendingIncome: 0,
+        pendingExpense: 0,
+        unpaidCount: 0,
+        paidCount: 0,
+        overdueCount: 0,
+      };
     });
 
     calendarEvents.forEach((ev) => {
-      if (!dailyFlows[ev.date]) {
-        dailyFlows[ev.date] = { income: 0, expense: 0, unpaidCount: 0, paidCount: 0, overdueCount: 0 };
+      if (!dailyData[ev.date]) {
+        dailyData[ev.date] = {
+          executedIncome: 0,
+          executedExpense: 0,
+          pendingIncome: 0,
+          pendingExpense: 0,
+          unpaidCount: 0,
+          paidCount: 0,
+          overdueCount: 0,
+        };
       }
 
       if (ev.status === 'paid') {
-        dailyFlows[ev.date].paidCount += 1;
+        dailyData[ev.date].paidCount += 1;
         if (ev.type === 'transaction' && ev.transactionRef) {
           if (ev.transactionRef.type === 'income') {
-            dailyFlows[ev.date].income += ev.amount;
+            dailyData[ev.date].executedIncome += ev.amount;
           } else if (ev.transactionRef.type === 'expense') {
-            dailyFlows[ev.date].expense += ev.amount;
+            dailyData[ev.date].executedExpense += ev.amount;
           }
+          // Note: transfer between accounts does not alter total liquid cash balance
+        } else if (ev.type === 'receivable') {
+          dailyData[ev.date].executedIncome += ev.amount;
+        } else {
+          // installment / payable paid
+          dailyData[ev.date].executedExpense += ev.amount;
         }
       } else if (ev.status === 'overdue') {
-        dailyFlows[ev.date].overdueCount += 1;
+        dailyData[ev.date].overdueCount += 1;
         if (ev.type === 'receivable') {
-          dailyFlows[ev.date].income += ev.amount;
+          dailyData[ev.date].pendingIncome += ev.amount;
         } else {
-          dailyFlows[ev.date].expense += ev.amount + (ev.lateFeeAmount || 0);
+          dailyData[ev.date].pendingExpense += ev.amount + (ev.lateFeeAmount || 0);
         }
       } else if (ev.status === 'upcoming') {
-        dailyFlows[ev.date].unpaidCount += 1;
+        dailyData[ev.date].unpaidCount += 1;
         if (ev.type === 'receivable') {
-          dailyFlows[ev.date].income += ev.amount;
+          dailyData[ev.date].pendingIncome += ev.amount;
         } else {
-          dailyFlows[ev.date].expense += ev.amount;
+          dailyData[ev.date].pendingExpense += ev.amount;
         }
       }
     });
 
-    // Build timeline projection
-    let runningBalance = totalCurrentBalance;
+    // 1. Current real cash balance right now (as of today)
+    const currentCash = totalCurrentBalance;
 
-    // For dates >= todayStr (Forward Projection)
-    // Find index of today or next available date
-    const todayIndex = sortedDates.findIndex((d) => d >= nowStr);
-    
-    // If today exists or future exists:
-    if (todayIndex !== -1) {
-      // Calculate future balances starting from today's current cash
-      let futureRunning = totalCurrentBalance;
-      for (let i = todayIndex; i < sortedDates.length; i++) {
-        const dateStr = sortedDates[i];
-        const flow = dailyFlows[dateStr] || { income: 0, expense: 0, unpaidCount: 0, paidCount: 0, overdueCount: 0 };
-        
-        // For future days, apply unpaid obligations/receivables
-        const netChange = flow.income - flow.expense;
-        futureRunning += netChange;
+    // 2. Find today's index in sorted array
+    let todayIdx = sortedDates.indexOf(nowStr);
+    if (todayIdx === -1) {
+      todayIdx = sortedDates.findIndex((d) => d >= nowStr);
+      if (todayIdx === -1) todayIdx = sortedDates.length - 1;
+    }
 
-        map.set(dateStr, {
-          projectedBalance: futureRunning,
-          dailyIncome: flow.income,
-          dailyExpense: flow.expense,
-          netDaily: netChange,
-          unpaidCount: flow.unpaidCount,
-          paidCount: flow.paidCount,
-          overdueCount: flow.overdueCount,
+    // 3. Backward calculation for past dates (< today):
+    // For past dates, the cash balance at end of date D was:
+    // Balance(D) = currentCash - sum_{day t in (D..today]} (executedIncome(t) - executedExpense(t))
+    let pastCash = currentCash;
+    for (let i = todayIdx; i >= 0; i--) {
+      const dStr = sortedDates[i];
+      const d = dailyData[dStr];
+
+      if (dStr === nowStr) {
+        // Today
+        const dailyIncome = d.executedIncome + d.pendingIncome;
+        const dailyExpense = d.executedExpense + d.pendingExpense;
+        const netDaily = dailyIncome - dailyExpense;
+        const projectedEndToday = currentCash + d.pendingIncome - d.pendingExpense;
+
+        map.set(dStr, {
+          projectedBalance: projectedEndToday,
+          dailyIncome,
+          dailyExpense,
+          netDaily,
+          unpaidCount: d.unpaidCount,
+          paidCount: d.paidCount,
+          overdueCount: d.overdueCount,
         });
+
+        // For past days, subtract today's executed net change
+        pastCash -= (d.executedIncome - d.executedExpense);
+      } else {
+        // Historical date before today
+        const dailyIncome = d.executedIncome;
+        const dailyExpense = d.executedExpense;
+        const netDaily = dailyIncome - dailyExpense;
+
+        map.set(dStr, {
+          projectedBalance: pastCash,
+          dailyIncome,
+          dailyExpense,
+          netDaily,
+          unpaidCount: d.unpaidCount,
+          paidCount: d.paidCount,
+          overdueCount: d.overdueCount,
+        });
+
+        // Step back one more day
+        pastCash -= (d.executedIncome - d.executedExpense);
       }
+    }
 
-      // For past dates (< todayStr) (Backward reconstruction)
-      let pastRunning = totalCurrentBalance;
-      for (let i = todayIndex - 1; i >= 0; i--) {
-        const dateStr = sortedDates[i];
-        const flow = dailyFlows[dateStr] || { income: 0, expense: 0, unpaidCount: 0, paidCount: 0, overdueCount: 0 };
-        const netChange = flow.income - flow.expense;
-        
-        map.set(dateStr, {
-          projectedBalance: pastRunning,
-          dailyIncome: flow.income,
-          dailyExpense: flow.expense,
-          netDaily: netChange,
-          unpaidCount: flow.unpaidCount,
-          paidCount: flow.paidCount,
-          overdueCount: flow.overdueCount,
-        });
-        pastRunning -= netChange;
-      }
-    } else {
-      // All dates are in the past
-      sortedDates.forEach((dateStr) => {
-        const flow = dailyFlows[dateStr];
-        map.set(dateStr, {
-          projectedBalance: totalCurrentBalance,
-          dailyIncome: flow.income,
-          dailyExpense: flow.expense,
-          netDaily: flow.income - flow.expense,
-          unpaidCount: flow.unpaidCount,
-          paidCount: flow.paidCount,
-          overdueCount: flow.overdueCount,
-        });
+    // 4. Forward projection for future dates (> today):
+    // Starting from today's projected end-of-day balance
+    const todayData = dailyData[nowStr] || {
+      executedIncome: 0,
+      executedExpense: 0,
+      pendingIncome: 0,
+      pendingExpense: 0,
+      unpaidCount: 0,
+      paidCount: 0,
+      overdueCount: 0,
+    };
+
+    let futureRunning = currentCash + todayData.pendingIncome - todayData.pendingExpense;
+
+    for (let i = todayIdx + 1; i < sortedDates.length; i++) {
+      const dStr = sortedDates[i];
+      const d = dailyData[dStr];
+
+      const dailyIncome = d.pendingIncome + d.executedIncome;
+      const dailyExpense = d.pendingExpense + d.executedExpense;
+      const netDaily = dailyIncome - dailyExpense;
+
+      futureRunning += (d.pendingIncome - d.pendingExpense);
+
+      map.set(dStr, {
+        projectedBalance: futureRunning,
+        dailyIncome,
+        dailyExpense,
+        netDaily,
+        unpaidCount: d.unpaidCount,
+        paidCount: d.paidCount,
+        overdueCount: d.overdueCount,
       });
     }
 
@@ -995,15 +1060,19 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
               {formatRupiah(monthStats.endOfMonthProjection)}
             </div>
             <div className="text-[11px] text-slate-300 mt-1 flex items-center justify-between">
-              <span>Kas Saat Ini:</span>
+              <span>Kas Riil Saat Ini:</span>
               <span className="font-bold text-white">{formatRupiahShort(monthStats.totalCurrentBalance)}</span>
             </div>
           </div>
           <div className="text-[10px] text-slate-400 pt-1 border-t border-white/10 flex items-center justify-between">
-            <span>Est. Akhir {monthNames[currentMonth]}</span>
+            <span className="truncate">
+              {monthStats.totalUpcomingAmount > 0 || monthStats.totalOverdueAmount > 0
+                ? `Kewajiban: -${formatRupiahShort(monthStats.totalUpcomingAmount + monthStats.totalOverdueAmount)}`
+                : 'Semua tagihan lunas'}
+            </span>
             <button
               onClick={handleJumpToToday}
-              className="text-indigo-300 hover:text-white font-bold underline cursor-pointer"
+              className="text-indigo-300 hover:text-white font-bold underline cursor-pointer shrink-0 ml-1"
             >
               Hari Ini →
             </button>
