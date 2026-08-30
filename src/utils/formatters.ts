@@ -7,6 +7,7 @@ export function formatRupiah(amount: number, withSymbol: boolean = true): string
 }
 
 export function formatRupiahShort(amount: number): string {
+  if (amount === undefined || amount === null || isNaN(amount)) return 'Rp 0';
   const isNegative = amount < 0;
   const abs = Math.abs(amount);
   let formatted = '';
