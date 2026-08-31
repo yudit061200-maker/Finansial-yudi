@@ -4,6 +4,7 @@ import {
   DebtType,
   DebtStatus,
   DebtPayment,
+  DebtNote,
   Account,
   Transaction,
 } from '../types/finance';
@@ -19,6 +20,7 @@ import {
   LateFeeCalculationResult,
   isDebtPaid,
 } from '../utils/formatters';
+import { getCashSummary } from '../utils/cashflow';
 import { MonthlyCreditCalculator } from './MonthlyCreditCalculator';
 import { PaymentCalendar } from './PaymentCalendar';
 import {
@@ -57,6 +59,11 @@ import {
   Percent,
   Coins,
   ShieldAlert,
+  NotebookPen,
+  StickyNote,
+  Copy,
+  FileText,
+  MessageSquare,
 } from 'lucide-react';
 
 interface DebtReceivableProps {
@@ -87,7 +94,17 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DebtRecord | null>(null);
+  const [modalDefaultType, setModalDefaultType] = useState<DebtType | undefined>(undefined);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+
+  // Notes Modal State (Fitur Catatan Hutang & Piutang)
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [activeNotesDebt, setActiveNotesDebt] = useState<DebtRecord | null>(null);
+
+  // Running Balance / Sisa Kas Calculation (Awalnya 0, menyesuaikan seluruh transaksi & cicilan)
+  const cashSummary = useMemo(() => {
+    return getCashSummary(transactions, 0);
+  }, [transactions]);
 
   // Payment/Installment Modal State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -106,6 +123,56 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
 
   // Expanded Payment History Accordions
   const [expandedHistories, setExpandedHistories] = useState<Record<string, boolean>>({});
+
+  // Sync activeNotesDebt if debts update
+  useEffect(() => {
+    if (activeNotesDebt) {
+      const fresh = debts.find((d) => d.id === activeNotesDebt.id);
+      if (fresh) {
+        setActiveNotesDebt(fresh);
+      }
+    }
+  }, [debts]);
+
+  // Handlers for adding/deleting Debt Notes
+  const handleSaveNote = async (debtId: string, noteData: Omit<DebtNote, 'id' | 'createdAt'>) => {
+    const targetDebt = debts.find((d) => d.id === debtId) || activeNotesDebt;
+    if (!targetDebt) return;
+
+    const newNote: DebtNote = {
+      id: `note-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      createdAt: new Date().toISOString(),
+      ...noteData,
+    };
+
+    const updatedNotes = [newNote, ...(targetDebt.debtNotes || [])];
+    const updatedDebt: DebtRecord = {
+      ...targetDebt,
+      debtNotes: updatedNotes,
+    };
+
+    await onSaveDebt(updatedDebt);
+    setActiveNotesDebt(updatedDebt);
+  };
+
+  const handleDeleteNote = async (debtId: string, noteId: string) => {
+    const targetDebt = debts.find((d) => d.id === debtId) || activeNotesDebt;
+    if (!targetDebt) return;
+
+    const updatedNotes = (targetDebt.debtNotes || []).filter((n) => n.id !== noteId);
+    const updatedDebt: DebtRecord = {
+      ...targetDebt,
+      debtNotes: updatedNotes,
+    };
+
+    await onSaveDebt(updatedDebt);
+    setActiveNotesDebt(updatedDebt);
+  };
+
+  const handleOpenNotesModal = (debt: DebtRecord) => {
+    setActiveNotesDebt(debt);
+    setIsNotesModalOpen(true);
+  };
 
   // Summary Calculations with Overdue Tracking
   const summary = useMemo(() => {
@@ -550,6 +617,75 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
               <span>{summary.urgentCount} cicilan jatuh tempo dekat</span>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Sisa Kas Berjalan & Quick Actions Banner */}
+      <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3.5 transition-colors">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+            <Wallet className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                Sisa Kas Berjalan
+              </span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Saldo Awal Rp 0 • Menyesuaikan seluruh pemasukan, pengeluaran & cicilan
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                {formatCurrency(cashSummary.currentSisaKas)}
+              </span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                (Total Masuk: <strong className="text-emerald-600 dark:text-emerald-400">{formatRupiahShort(cashSummary.totalIncome)}</strong>, Keluar: <strong className="text-rose-600 dark:text-rose-400">{formatRupiahShort(cashSummary.totalExpense)}</strong>)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Action Buttons for Explicit Types */}
+        <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
+          <button
+            onClick={() => {
+              setEditingDebt(null);
+              setModalDefaultType('payable');
+              setIsModalOpen(true);
+            }}
+            className="flex-1 md:flex-none px-3 py-2 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+            title="Tambah catatan hutang tunai baru"
+          >
+            <ArrowUpRight className="w-3.5 h-3.5" />
+            <span>+ Catat Hutang</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setEditingDebt(null);
+              setModalDefaultType('receivable');
+              setIsModalOpen(true);
+            }}
+            className="flex-1 md:flex-none px-3 py-2 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+            title="Tambah catatan piutang uang baru"
+          >
+            <ArrowDownLeft className="w-3.5 h-3.5" />
+            <span>+ Catat Piutang</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setEditingDebt(null);
+              setModalDefaultType('installment');
+              setIsModalOpen(true);
+            }}
+            className="flex-1 md:flex-none px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95"
+            title="Tambah catatan cicilan / kredit barang baru"
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>+ Kredit Barang</span>
+          </button>
         </div>
       </div>
 
@@ -1132,6 +1268,49 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                     </button>
                   </div>
 
+                  {/* Notes & Memo Action Button */}
+                  <button
+                    onClick={() => handleOpenNotesModal(debt)}
+                    className="w-full py-1.5 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
+                    title="Lihat & Tambah Catatan Hutang / Piutang"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <NotebookPen className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Catatan & Janji Bayar</span>
+                      {debt.debtNotes && debt.debtNotes.length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-extrabold">
+                          {debt.debtNotes.length}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5">
+                      <Plus className="w-3 h-3" />
+                      <span>Catatan</span>
+                    </span>
+                  </button>
+
+                  {/* Excerpt of most recent note if exists */}
+                  {debt.debtNotes && debt.debtNotes.length > 0 && (
+                    <div
+                      onClick={() => handleOpenNotesModal(debt)}
+                      className="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/40 text-[11px] cursor-pointer hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
+                      title="Klik untuk membuka riwayat catatan lengkap"
+                    >
+                      <div className="flex items-center justify-between text-[10px] text-amber-800 dark:text-amber-300 font-bold mb-0.5">
+                        <span className="flex items-center gap-1">
+                          <StickyNote className="w-3 h-3 text-amber-600" />
+                          <span>Catatan Terakhir ({formatDateIndo(debt.debtNotes[0].date)}):</span>
+                        </span>
+                        <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.2 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
+                          {debt.debtNotes[0].category === 'janji_bayar' ? 'Janji Bayar' : debt.debtNotes[0].category === 'perjanjian' ? 'Perjanjian' : debt.debtNotes[0].category === 'konfirmasi' ? 'Konfirmasi' : debt.debtNotes[0].category === 'keringanan' ? 'Keringanan' : 'Catatan'}
+                        </span>
+                      </div>
+                      <p className="text-slate-700 dark:text-slate-300 line-clamp-2 italic font-medium">
+                        "{debt.debtNotes[0].content}"
+                      </p>
+                    </div>
+                  )}
+
                   {/* Payment History Accordion */}
                   {debt.payments && debt.payments.length > 0 && (
                     <div>
@@ -1551,11 +1730,25 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         onClose={() => {
           setIsModalOpen(false);
           setEditingDebt(null);
+          setModalDefaultType(undefined);
         }}
         onSave={onSaveDebt}
         editingDebt={editingDebt}
+        defaultType={modalDefaultType}
         accounts={accounts}
         onAddTransaction={onAddTransaction}
+      />
+
+      {/* MODAL: Catatan & Memo Khusus Hutang & Piutang (Debt Notes) */}
+      <DebtNotesModal
+        isOpen={isNotesModalOpen}
+        onClose={() => {
+          setIsNotesModalOpen(false);
+          setActiveNotesDebt(null);
+        }}
+        debt={activeNotesDebt}
+        onSaveNote={handleSaveNote}
+        onDeleteNote={handleDeleteNote}
       />
 
       {/* MODAL: Kalkulator Simulasi Kredit Barang Interaktif */}
@@ -1934,6 +2127,7 @@ interface DebtFormModalProps {
   onClose: () => void;
   onSave: (debt: DebtRecord) => Promise<void>;
   editingDebt: DebtRecord | null;
+  defaultType?: DebtType;
   accounts: Account[];
   onAddTransaction?: (tx: Omit<Transaction, 'id'>) => Promise<void>;
 }
@@ -1943,6 +2137,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
   onClose,
   onSave,
   editingDebt,
+  defaultType,
   accounts,
   onAddTransaction,
 }) => {
@@ -2008,7 +2203,8 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
         setMaxLateFee(editingDebt.maxLateFee);
         setGracePeriodDays(editingDebt.gracePeriodDays || 0);
       } else {
-        setType('installment');
+        const initType = defaultType || 'installment';
+        setType(initType);
         setItemName('');
         setProviderName('');
         setPersonName('');
@@ -2022,12 +2218,18 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
         setDueDayOfMonth(5);
         setStartDate(new Date().toISOString().split('T')[0]);
         setDueDate(calculateNearestDueDate(5));
-        setCategory('Kredit Gadget & Elektronik');
+        setCategory(
+          initType === 'installment'
+            ? 'Kredit Gadget & Elektronik'
+            : initType === 'payable'
+            ? 'Cicilan Bank'
+            : 'Pinjaman Teman'
+        );
         setNotes('');
         setRecordInitialTransaction(false);
 
         // Default late fee enabled for installment
-        setHasLateFeeRule(true);
+        setHasLateFeeRule(initType === 'installment');
         setLateFeeType('daily_percent');
         setLateFeeValue(0.2);
         setMaxLateFee(200000);
@@ -2035,7 +2237,7 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
       }
       setSelectedAccountId(accounts[0]?.id || '');
     }
-  }, [editingDebt, isOpen, accounts]);
+  }, [editingDebt, isOpen, defaultType, accounts]);
 
   // Auto calculate remaining based on paid months or paid amount
   const handleTenorOrMonthsChange = (newTenor: number, newPaidMonths: number, monthly: number) => {
@@ -2698,6 +2900,261 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+/* =========================================================================
+   KOMPONEN MODAL: CATATAN & MEMO KHUSUS HUTANG / PIUTANG (DEBT NOTES)
+   ========================================================================= */
+interface DebtNotesModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  debt: DebtRecord | null;
+  onSaveNote: (debtId: string, noteData: Omit<DebtNote, 'id' | 'createdAt'>) => Promise<void>;
+  onDeleteNote: (debtId: string, noteId: string) => Promise<void>;
+}
+
+export const DebtNotesModal: React.FC<DebtNotesModalProps> = ({
+  isOpen,
+  onClose,
+  debt,
+  onSaveNote,
+  onDeleteNote,
+}) => {
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState<'perjanjian' | 'janji_bayar' | 'konfirmasi' | 'keringanan' | 'umum'>('umum');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  if (!isOpen || !debt) return null;
+
+  const notesList = debt.debtNotes || [];
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await onSaveNote(debt.id, {
+        content: content.trim(),
+        category,
+        date,
+      });
+      setContent('');
+    } catch (err) {
+      console.error('Error saving note:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCopy = (noteText: string, noteId: string) => {
+    navigator.clipboard.writeText(noteText);
+    setCopiedId(noteId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const getCategoryBadge = (cat?: string) => {
+    switch (cat) {
+      case 'perjanjian':
+        return { label: '🤝 Perjanjian / Surat', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800' };
+      case 'janji_bayar':
+        return { label: '⏱️ Janji Bayar / Komitmen', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800' };
+      case 'konfirmasi':
+        return { label: '💬 Konfirmasi WA / Bukti', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' };
+      case 'keringanan':
+        return { label: '🏷️ Keringanan / Diskon', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-200 dark:border-purple-800' };
+      default:
+        return { label: '📝 Catatan Umum', color: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700' };
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 border border-slate-100 dark:border-slate-800 my-8 animate-in fade-in zoom-in-95 transition-colors">
+        {/* Modal Header */}
+        <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+              <NotebookPen className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                  {debt.type === 'installment' ? 'Kredit Barang' : debt.type === 'payable' ? 'Hutang Tunai' : 'Piutang Saya'}
+                </span>
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {debt.personName || debt.providerName}
+                </span>
+              </div>
+              <h3 className="font-bold text-base text-slate-900 dark:text-white mt-0.5">
+                Catatan & Memo: {debt.itemName || debt.title}
+              </h3>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Form Tambah Catatan Baru */}
+        <form onSubmit={handleAdd} className="p-4 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Tambah Catatan / Janji Bayar Baru</span>
+            </span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">Tersimpan ke Cloud</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Kategori Catatan
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as any)}
+                className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-medium cursor-pointer"
+              >
+                <option value="umum">📝 Catatan Umum</option>
+                <option value="janji_bayar">⏱️ Janji Bayar / Komitmen</option>
+                <option value="perjanjian">🤝 Surat & Perjanjian</option>
+                <option value="konfirmasi">💬 Konfirmasi WA / Bukti</option>
+                <option value="keringanan">🏷️ Diskon / Keringanan Denda</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Tanggal Catatan
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white font-medium"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Isi Catatan / Memo
+            </label>
+            <textarea
+              required
+              rows={2}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Tulis detail catatan, perjanjian perpanjangan waktu, nomor resi/kontrak, hasil telepon/WA, atau janji bayar..."
+              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={isSubmitting || !content.trim()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Simpan Catatan</span>
+            </button>
+          </div>
+        </form>
+
+        {/* Timeline Riwayat Catatan */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200">
+            <span className="flex items-center gap-1.5">
+              <History className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Daftar Catatan Terlampir ({notesList.length})</span>
+            </span>
+          </div>
+
+          {notesList.length === 0 ? (
+            <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+              <StickyNote className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+              <p className="font-semibold">Belum ada catatan khusus.</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Tambahkan catatan di form atas untuk mendokumentasikan komitmen, nomor invoice, atau janji pelunasan.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {notesList.map((note) => {
+                const badge = getCategoryBadge(note.category);
+                return (
+                  <div
+                    key={note.id}
+                    className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs space-y-1.5 transition-all hover:border-slate-300 dark:hover:border-slate-600"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                          {formatDateIndo(note.date)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(note.content, note.id)}
+                          title="Salin isi catatan"
+                          className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          {copiedId === note.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm('Hapus catatan ini?')) {
+                              onDeleteNote(debt.id, note.id);
+                            }
+                          }}
+                          title="Hapus catatan"
+                          className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-slate-800 dark:text-slate-200 text-xs whitespace-pre-wrap leading-relaxed">
+                      {note.content}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+          >
+            Tutup
+          </button>
+        </div>
       </div>
     </div>
   );

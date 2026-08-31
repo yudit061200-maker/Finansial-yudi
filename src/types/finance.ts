@@ -98,6 +98,15 @@ export interface DebtPayment {
   waivedLateFee?: number; // Denda yang dibebaskan/diberi diskon keringanan (Rp)
 }
 
+export interface DebtNote {
+  id: string;
+  date: string; // ISO String or YYYY-MM-DD
+  content: string;
+  category?: 'perjanjian' | 'janji_bayar' | 'konfirmasi' | 'keringanan' | 'umum';
+  author?: string;
+  createdAt?: string;
+}
+
 export interface DebtRecord {
   id: string;
   type: DebtType;
@@ -111,6 +120,7 @@ export interface DebtRecord {
   startDate: string; // Tanggal Mulai / Pembelian
   status: DebtStatus; // 'unpaid' | 'partial' | 'paid'
   notes?: string;
+  debtNotes?: DebtNote[]; // Riwayat log catatan / memo hutang & piutang
   category?: string; // e.g. "Kredit Gadget & Elektronik", "Cicilan Kendaraan", "PayLater", dll.
   payments: DebtPayment[];
   createdAt: string;

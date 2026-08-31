@@ -13,6 +13,7 @@ import {
   formatDateIndo,
   isDebtPaid,
 } from '../utils/formatters';
+import { getCashSummary } from '../utils/cashflow';
 import {
   TrendingUp,
   TrendingDown,
@@ -76,6 +77,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const totalNetWorth = useMemo(() => {
     return accounts.reduce((sum, acc) => sum + acc.balance, 0);
   }, [accounts]);
+
+  // Running Balance / Sisa Kas Berjalan (Saldo awal 0, dinamis terhadap mutasi)
+  const cashSummary = useMemo(() => {
+    return getCashSummary(transactions, 0);
+  }, [transactions]);
 
   // Debt & Receivable Stats
   const debtStats = useMemo(() => {
@@ -298,9 +304,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div className="text-2xl font-black text-slate-950 dark:text-white tracking-tight font-mono tabular-nums">
               {formatRupiah(totalNetWorth)}
             </div>
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-600 dark:text-slate-400 font-semibold">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-950"></span>
-              <span>{accounts.length} Akun & Dompet Terhubung</span>
+            <div className="flex items-center justify-between gap-1.5 mt-2 text-xs text-slate-600 dark:text-slate-400 font-semibold flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-950"></span>
+                <span>{accounts.length} Akun Terhubung</span>
+              </div>
+              <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-900">
+                Sisa Kas: {formatRupiahShort(cashSummary.currentSisaKas)}
+              </span>
             </div>
           </div>
         </div>
