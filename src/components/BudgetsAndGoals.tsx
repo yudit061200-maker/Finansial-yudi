@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Budget, FinancialGoal, Transaction, Account } from '../types/finance';
 import { formatRupiah, formatDateIndo, DEFAULT_CATEGORIES } from '../utils/formatters';
 import confetti from 'canvas-confetti';
+import { ConfirmModal } from './ConfirmModal';
 import {
   PiggyBank,
   Plus,
@@ -61,6 +62,8 @@ export const BudgetsAndGoals: React.FC<BudgetsAndGoalsProps> = ({
   const [editingGoal, setEditingGoal] = useState<FinancialGoal | null>(null);
 
   const [showContributeModal, setShowContributeModal] = useState<FinancialGoal | null>(null);
+  const [budgetToDelete, setBudgetToDelete] = useState<{ id: string; category: string } | null>(null);
+  const [goalToDelete, setGoalToDelete] = useState<{ id: string; title: string } | null>(null);
 
   // Budget Form state
   const [budgetCategory, setBudgetCategory] = useState('Makanan & Minuman');
@@ -208,13 +211,17 @@ export const BudgetsAndGoals: React.FC<BudgetsAndGoalsProps> = ({
   };
 
   const handleDeleteBudget = (id: string, category: string) => {
-    if (confirm(`Hapus batas anggaran untuk kategori "${category}"?`)) {
-      if (onDeleteBudget) {
-        onDeleteBudget(id);
-      } else {
-        onUpdateBudgets(budgets.filter((b) => b.id !== id));
-      }
+    setBudgetToDelete({ id, category });
+  };
+
+  const handleExecuteDeleteBudget = () => {
+    if (!budgetToDelete) return;
+    if (onDeleteBudget) {
+      onDeleteBudget(budgetToDelete.id);
+    } else {
+      onUpdateBudgets(budgets.filter((b) => b.id !== budgetToDelete.id));
     }
+    setBudgetToDelete(null);
   };
 
   // Handle Save Goal (Add or Edit)
@@ -269,13 +276,17 @@ export const BudgetsAndGoals: React.FC<BudgetsAndGoalsProps> = ({
   };
 
   const handleDeleteGoal = (id: string, title: string) => {
-    if (confirm(`Hapus target tabungan "${title}"?`)) {
-      if (onDeleteGoal) {
-        onDeleteGoal(id);
-      } else {
-        onUpdateGoals(goals.filter((g) => g.id !== id));
-      }
+    setGoalToDelete({ id, title });
+  };
+
+  const handleExecuteDeleteGoal = () => {
+    if (!goalToDelete) return;
+    if (onDeleteGoal) {
+      onDeleteGoal(goalToDelete.id);
+    } else {
+      onUpdateGoals(goals.filter((g) => g.id !== goalToDelete.id));
     }
+    setGoalToDelete(null);
   };
 
   // Handle Add Contribution to Goal
@@ -896,6 +907,40 @@ export const BudgetsAndGoals: React.FC<BudgetsAndGoalsProps> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Budget Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!budgetToDelete}
+        title="Hapus Batas Anggaran?"
+        message={
+          budgetToDelete
+            ? `Apakah Anda yakin ingin menghapus batas anggaran untuk kategori "${budgetToDelete.category}"?`
+            : ''
+        }
+        confirmText="Ya, Hapus Anggaran"
+        cancelText="Batal"
+        variant="danger"
+        icon="trash"
+        onConfirm={handleExecuteDeleteBudget}
+        onClose={() => setBudgetToDelete(null)}
+      />
+
+      {/* Delete Goal Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!goalToDelete}
+        title="Hapus Target Tabungan?"
+        message={
+          goalToDelete
+            ? `Apakah Anda yakin ingin menghapus target tabungan "${goalToDelete.title}"?`
+            : ''
+        }
+        confirmText="Ya, Hapus Target"
+        cancelText="Batal"
+        variant="danger"
+        icon="trash"
+        onConfirm={handleExecuteDeleteGoal}
+        onClose={() => setGoalToDelete(null)}
+      />
     </div>
   );
 };

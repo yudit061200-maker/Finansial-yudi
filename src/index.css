@@ -8,12 +8,75 @@
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     --bg-page: #F8FAFC;
     --text-primary: #0F172A;
+    --primary-color: #6366F1;
   }
 
-  html.dark {
+  /* Default Midnight Indigo */
+  html.dark, html.dark[data-palette="indigo"] {
     --bg-page: #0B0F19;
     --text-primary: #F8FAFC;
+    --primary-color: #6366F1;
     color-scheme: dark;
+  }
+
+  /* Palette: Emerald Wealth */
+  html[data-palette="emerald"] {
+    --bg-page: #F4FBF7;
+    --text-primary: #064E3B;
+    --primary-color: #10B981;
+  }
+  html.dark[data-palette="emerald"] {
+    --bg-page: #081711;
+    --text-primary: #F2FDF7;
+    --primary-color: #10B981;
+  }
+
+  /* Palette: Black Gold Luxury */
+  html[data-palette="gold"] {
+    --bg-page: #FAF8F3;
+    --text-primary: #451A03;
+    --primary-color: #F59E0B;
+  }
+  html.dark[data-palette="gold"] {
+    --bg-page: #12100C;
+    --text-primary: #FEF3C7;
+    --primary-color: #F59E0B;
+  }
+
+  /* Palette: Cyber Sapphire */
+  html[data-palette="sapphire"] {
+    --bg-page: #F0F7FF;
+    --text-primary: #1E3A8A;
+    --primary-color: #2563EB;
+  }
+  html.dark[data-palette="sapphire"] {
+    --bg-page: #0A1120;
+    --text-primary: #EFF6FF;
+    --primary-color: #2563EB;
+  }
+
+  /* Palette: Nordic Minimalist */
+  html[data-palette="nordic"] {
+    --bg-page: #FAFAFA;
+    --text-primary: #18181B;
+    --primary-color: #27272A;
+  }
+  html.dark[data-palette="nordic"] {
+    --bg-page: #101012;
+    --text-primary: #FAFAFA;
+    --primary-color: #A1A1AA;
+  }
+
+  /* Palette: Sunset Terracotta */
+  html[data-palette="sunset"] {
+    --bg-page: #FFF5F6;
+    --text-primary: #881337;
+    --primary-color: #F43F5E;
+  }
+  html.dark[data-palette="sunset"] {
+    --bg-page: #170E12;
+    --text-primary: #FFF1F2;
+    --primary-color: #F43F5E;
   }
 
   body {
@@ -22,7 +85,7 @@
     background-color: var(--bg-page);
     color: var(--text-primary);
     -webkit-tap-highlight-color: transparent;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   /* Refined Tabular Figures for All Numbers & Currencies */
@@ -31,10 +94,83 @@
   }
 }
 
+/* Dynamic subtle background mesh tailored to palettes */
+.bg-mesh-light {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(244, 63, 94, 0.03) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(139, 92, 246, 0.04) 0px, transparent 50%);
+}
+
+html[data-palette="emerald"] .bg-mesh-light {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(5, 150, 105, 0.06) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(52, 211, 153, 0.05) 0px, transparent 50%);
+}
+
+html[data-palette="gold"] .bg-mesh-light {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(217, 119, 6, 0.06) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(251, 191, 36, 0.05) 0px, transparent 50%);
+}
+
+html[data-palette="sapphire"] .bg-mesh-light {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.06) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.05) 0px, transparent 50%);
+}
+
+html[data-palette="sunset"] .bg-mesh-light {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(244, 63, 94, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(249, 115, 22, 0.06) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(251, 113, 133, 0.05) 0px, transparent 50%);
+}
+
+.bg-mesh-dark {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(244, 63, 94, 0.06) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(139, 92, 246, 0.09) 0px, transparent 50%);
+}
+
+html.dark[data-palette="emerald"] .bg-mesh-dark {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.18) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(5, 150, 105, 0.14) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(52, 211, 153, 0.10) 0px, transparent 50%);
+}
+
+html.dark[data-palette="gold"] .bg-mesh-dark {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.16) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(217, 119, 6, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(251, 191, 36, 0.08) 0px, transparent 50%);
+}
+
+html.dark[data-palette="sapphire"] .bg-mesh-dark {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(37, 99, 235, 0.18) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(14, 165, 233, 0.10) 0px, transparent 50%);
+}
+
+html.dark[data-palette="sunset"] .bg-mesh-dark {
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(244, 63, 94, 0.16) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(249, 115, 22, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(251, 113, 133, 0.08) 0px, transparent 50%);
+}
+
 /* Custom aesthetic scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -67,26 +203,90 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   scrollbar-width: none;
 }
 
-/* Subtle glow and elevation helper */
-.card-aesthetic {
-  background-color: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.85);
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+/* Fintech card styling */
+.fintech-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.02);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-html.dark .card-aesthetic {
-  background-color: #111827;
-  border: 1px solid rgba(31, 41, 55, 0.9);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+html.dark .fintech-card {
+  background: #111827;
+  border: 1px solid rgba(31, 41, 55, 0.85);
+  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.5);
 }
 
-.card-aesthetic:hover {
-  border-color: rgba(203, 213, 225, 1);
-  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+html.dark[data-palette="emerald"] .fintech-card {
+  background: #0E1F18;
+  border-color: rgba(16, 185, 129, 0.2);
 }
 
-html.dark .card-aesthetic:hover {
-  border-color: rgba(75, 85, 99, 1);
-  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.6);
+html.dark[data-palette="gold"] .fintech-card {
+  background: #171410;
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+html.dark[data-palette="sapphire"] .fintech-card {
+  background: #0F172A;
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+html.dark[data-palette="nordic"] .fintech-card {
+  background: #18181B;
+  border-color: rgba(63, 63, 70, 0.6);
+}
+
+html.dark[data-palette="sunset"] .fintech-card {
+  background: #1F1217;
+  border-color: rgba(244, 63, 94, 0.2);
+}
+
+.fintech-card:hover {
+  border-color: rgba(199, 210, 254, 0.9);
+  transform: translateY(-1.5px);
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+}
+
+html.dark .fintech-card:hover {
+  border-color: rgba(79, 70, 229, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px 0 rgba(99, 102, 241, 0.15);
+}
+
+html.dark[data-palette="emerald"] .fintech-card:hover {
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px 0 rgba(16, 185, 129, 0.15);
+}
+
+html.dark[data-palette="gold"] .fintech-card:hover {
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px 0 rgba(245, 158, 11, 0.15);
+}
+
+html.dark[data-palette="sapphire"] .fintech-card:hover {
+  border-color: rgba(37, 99, 235, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px 0 rgba(37, 99, 235, 0.15);
+}
+
+html.dark[data-palette="sunset"] .fintech-card:hover {
+  border-color: rgba(244, 63, 94, 0.5);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 15px 0 rgba(244, 63, 94, 0.15);
+}
+
+/* Shimmer animation for AI & live data */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(0.98); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}
+
+/* Balance privacy mask */
+.privacy-blur {
+  filter: blur(8px);
+  user-select: none;
+  pointer-events: none;
+  transition: filter 0.2s ease;
 }

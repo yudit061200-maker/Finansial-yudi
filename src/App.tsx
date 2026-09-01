@@ -32,6 +32,8 @@ import {
   deleteTransactionsByAccountId,
 } from './services/firebaseDb';
 import { Header, NavTab } from './components/Header';
+import { Sidebar } from './components/Sidebar';
+import { CommandPalette } from './components/CommandPalette';
 import { Dashboard } from './components/Dashboard';
 import { DebtReceivable } from './components/DebtReceivable';
 import { AiChatInput } from './components/AiChatInput';
@@ -43,10 +45,37 @@ import { TransactionDetailModal } from './components/TransactionDetailModal';
 import { AccountModal } from './components/AccountModal';
 import { AndroidBottomNav } from './components/AndroidBottomNav';
 import { AndroidInstallModal } from './components/AndroidInstallModal';
+import { ConfirmModal } from './components/ConfirmModal';
+import { ThemeSelectorModal } from './components/ThemeSelectorModal';
+import { useTheme } from './context/ThemeContext';
+import { getCashSummary } from './utils/cashflow';
+import { isDebtPaid } from './utils/formatters';
 import { RotateCcw, Check, CloudCheck, Loader2, Smartphone } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const { isThemeModalOpen, setIsThemeModalOpen } = useTheme();
+
+  // Privacy Mode (hide/show sensitive amounts)
+  const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('arthasmart_privacy') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleTogglePrivacy = () => {
+    setIsPrivacyMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('arthasmart_privacy', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // Core Financial State loaded directly from Cloud Firestore
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -64,7 +93,35 @@ export default function App() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Computed overview figures for sidebar
+  const totalNetWorth = useMemo(() => {
+    return accounts.reduce((sum, acc) => sum + acc.balance, 0);
+  }, [accounts]);
+
+  const cashSummary = useMemo(() => {
+    return getCashSummary(transactions, 0);
+  }, [transactions]);
+
+  const activeDebtsCount = useMemo(() => {
+    return debts.filter((d) => !isDebtPaid(d)).length;
+  }, [debts]);
+
+  // Global keyboard shortcut for Command Palette (Ctrl+K or ⌘K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Handle Android App Shortcuts & URL Query parameters
   useEffect(() => {
@@ -482,173 +539,193 @@ export default function App() {
   };
 
   // Reset to initial demo data in Firestore
-  const handleResetData = async () => {
-    if (confirm('Apakah Anda yakin ingin mengatur ulang seluruh data keuangan di cloud Firestore ke data contoh bawaan?')) {
-      try {
-        await resetAllFirestoreData();
-        showToast('Data di Firebase Firestore berhasil di-reset ke data bawaan.');
-      } catch (err) {
-        console.error('Error resetting Firestore data:', err);
-        showToast('Gagal me-reset data di Firestore.');
-      }
+  const handleResetData = () => {
+    setIsResetConfirmOpen(true);
+  };
+
+  const handleExecuteReset = async () => {
+    try {
+      await resetAllFirestoreData();
+      showToast('Data di Firebase Firestore berhasil di-reset ke data bawaan.');
+    } catch (err) {
+      console.error('Error resetting Firestore data:', err);
+      showToast('Gagal me-reset data di Firestore.');
+    } finally {
+      setIsResetConfirmOpen(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white flex flex-col justify-between pb-20 md:pb-0 transition-colors">
-      {/* Top Bar Header */}
-      <Header
+    <div className="min-h-screen flex bg-slate-50 dark:bg-[#0B0F19] bg-mesh-light dark:bg-mesh-dark text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-300">
+      {/* Executive Desktop & Mobile Drawer Sidebar */}
+      <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
         onOpenQuickScan={() => setActiveTab('receipt')}
         onOpenAndroidModal={() => setIsAndroidModalOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onResetData={handleResetData}
+        isPrivacyMode={isPrivacyMode}
+        onTogglePrivacy={handleTogglePrivacy}
+        isDbConnected={isDbLoaded}
+        totalNetWorth={totalNetWorth}
+        currentSisaKas={cashSummary.currentSisaKas}
+        activeDebtsCount={activeDebtsCount}
+        isOpenMobile={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 w-full flex-1">
-        {activeTab === 'dashboard' && (
-          <Dashboard
-            accounts={accounts}
-            transactions={transactions}
-            budgets={budgets}
-            goals={goals}
-            debts={debts}
-            healthScore={healthScore}
-            onNavigate={(tab) => setActiveTab(tab)}
-            onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
-            onSelectTransaction={(tx) => setSelectedTransactionDetail(tx)}
-            onAddNewAccount={() => {
-              setEditingAccount(null);
-              setIsAccountModalOpen(true);
-            }}
-            onEditAccount={(acc) => {
-              setEditingAccount(acc);
-              setIsAccountModalOpen(true);
-            }}
-            onDeleteAccount={handleDeleteAccount}
-            onResetAccountBalance={handleResetAccountBalance}
-          />
-        )}
+      {/* Main Workspace Column */}
+      <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
+        {/* Cockpit Topbar */}
+        <Header
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
+          onOpenQuickScan={() => setActiveTab('receipt')}
+          onOpenAndroidModal={() => setIsAndroidModalOpen(true)}
+          onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+          isPrivacyMode={isPrivacyMode}
+          onTogglePrivacy={handleTogglePrivacy}
+          isDbConnected={isDbLoaded}
+        />
 
-        {activeTab === 'transactions' && (
-          <TransactionList
-            transactions={transactions}
-            accounts={accounts}
-            onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
-            onEditTransaction={(tx) => {
-              setEditingTransaction(tx);
-              setIsNewTxModalOpen(true);
-            }}
-            onDeleteTransaction={handleDeleteTransaction}
-            onSelectTransaction={(tx) => setSelectedTransactionDetail(tx)}
-          />
-        )}
+        {/* Dynamic Main Content Workspace */}
+        <main className="w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex-1 max-w-[1600px] mx-auto">
+          {activeTab === 'dashboard' && (
+            <Dashboard
+              accounts={accounts}
+              transactions={transactions}
+              budgets={budgets}
+              goals={goals}
+              debts={debts}
+              healthScore={healthScore}
+              isPrivacyMode={isPrivacyMode}
+              onNavigate={(tab) => setActiveTab(tab)}
+              onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
+              onSelectTransaction={(tx) => setSelectedTransactionDetail(tx)}
+              onAddNewAccount={() => {
+                setEditingAccount(null);
+                setIsAccountModalOpen(true);
+              }}
+              onEditAccount={(acc) => {
+                setEditingAccount(acc);
+                setIsAccountModalOpen(true);
+              }}
+              onDeleteAccount={handleDeleteAccount}
+              onResetAccountBalance={handleResetAccountBalance}
+            />
+          )}
 
-        {activeTab === 'debts' && (
-          <DebtReceivable
-            debts={debts}
-            accounts={accounts}
-            transactions={transactions}
-            onSaveDebt={handleSaveDebt}
-            onDeleteDebt={handleDeleteDebt}
-            onAddTransaction={handleAddTransaction}
-          />
-        )}
+          {activeTab === 'transactions' && (
+            <TransactionList
+              transactions={transactions}
+              accounts={accounts}
+              isPrivacyMode={isPrivacyMode}
+              onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
+              onEditTransaction={(tx) => {
+                setEditingTransaction(tx);
+                setIsNewTxModalOpen(true);
+              }}
+              onDeleteTransaction={handleDeleteTransaction}
+              onSelectTransaction={(tx) => setSelectedTransactionDetail(tx)}
+            />
+          )}
 
-        {activeTab === 'aichat' && (
-          <AiChatInput
-            accounts={accounts}
-            chatHistory={chatHistory}
-            onSaveChatMessage={async (msg) => {
-              try {
-                await addChatMessageToFirestore(msg);
-              } catch (err) {
-                console.error('Error saving chat message to Firestore:', err);
-              }
-            }}
-            onAddTransaction={handleAddTransaction}
-            financialContextSummary={{
-              totalBalance: accounts.reduce((sum, a) => sum + a.balance, 0),
-              accountsCount: accounts.length,
-              debtsCount: debts.length,
-              availableAccounts: accounts.map((a) => ({
-                id: a.id,
-                name: a.name,
-                type: a.type,
-                provider: a.provider,
-                balance: a.balance,
-              })),
-            }}
-          />
-        )}
+          {activeTab === 'debts' && (
+            <DebtReceivable
+              debts={debts}
+              accounts={accounts}
+              transactions={transactions}
+              onSaveDebt={handleSaveDebt}
+              onDeleteDebt={handleDeleteDebt}
+              onAddTransaction={handleAddTransaction}
+            />
+          )}
 
-        {activeTab === 'receipt' && (
-          <ReceiptScanner
-            accounts={accounts}
-            onAddTransaction={handleAddTransaction}
-          />
-        )}
+          {activeTab === 'aichat' && (
+            <AiChatInput
+              accounts={accounts}
+              chatHistory={chatHistory}
+              onSaveChatMessage={async (msg) => {
+                try {
+                  await addChatMessageToFirestore(msg);
+                } catch (err) {
+                  console.error('Error saving chat message to Firestore:', err);
+                }
+              }}
+              onAddTransaction={handleAddTransaction}
+              financialContextSummary={{
+                totalBalance: accounts.reduce((sum, a) => sum + a.balance, 0),
+                accountsCount: accounts.length,
+                debtsCount: debts.length,
+                availableAccounts: accounts.map((a) => ({
+                  id: a.id,
+                  name: a.name,
+                  type: a.type,
+                  provider: a.provider,
+                  balance: a.balance,
+                })),
+              }}
+            />
+          )}
 
-        {activeTab === 'budgets' && (
-          <BudgetsAndGoals
-            budgets={budgets}
-            goals={goals}
-            transactions={transactions}
-            accounts={accounts}
-            onUpdateBudgets={handleUpdateBudgets}
-            onUpdateGoals={handleUpdateGoals}
-            onDeleteBudget={handleDeleteBudget}
-            onDeleteGoal={handleDeleteGoal}
-            onAddTransaction={handleAddTransaction}
-          />
-        )}
-      </main>
+          {activeTab === 'receipt' && (
+            <ReceiptScanner
+              accounts={accounts}
+              onAddTransaction={handleAddTransaction}
+            />
+          )}
 
-      {/* Floating Bottom Status / Firebase Cloud Sync Bar (Desktop View) */}
-      <footer className="hidden md:block border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-3.5 text-xs text-slate-500 dark:text-slate-400 mt-auto transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-bold text-slate-800 dark:text-slate-200">ArthaSmart AI</span>
-            <span className="text-slate-300 dark:text-slate-700">•</span>
-            <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/60 dark:border-emerald-800/80 px-2 py-0.5 rounded-md font-medium text-[11px]">
-              {isDbLoaded ? (
-                <>
-                  <CloudCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Firebase Firestore Cloud: Terhubung & Real-time</span>
-                </>
-              ) : (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-spin" />
-                  <span>Menghubungkan ke Firestore...</span>
-                </>
-              )}
+          {activeTab === 'budgets' && (
+            <BudgetsAndGoals
+              budgets={budgets}
+              goals={goals}
+              transactions={transactions}
+              accounts={accounts}
+              onUpdateBudgets={handleUpdateBudgets}
+              onUpdateGoals={handleUpdateGoals}
+              onDeleteBudget={handleDeleteBudget}
+              onDeleteGoal={handleDeleteGoal}
+              onAddTransaction={handleAddTransaction}
+            />
+          )}
+        </main>
+
+        {/* Executive Footbar */}
+        <footer className="hidden lg:block border-t border-slate-200/80 dark:border-slate-800/80 bg-white/80 dark:bg-[#0B0F19]/80 backdrop-blur-md py-3 text-xs text-slate-500 dark:text-slate-400 mt-auto transition-colors">
+          <div className="w-full px-4 sm:px-6 lg:px-8 max-w-[1600px] mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">ArthaSmart AI</span>
+              <span className="text-slate-300 dark:text-slate-700">•</span>
+              <span className="text-slate-500 dark:text-slate-400">Sistem Manajemen Finansial Real-time Firestore</span>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="text-slate-400">Tekan <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-mono">Ctrl+K</kbd> untuk pencarian cepat</span>
             </div>
           </div>
+        </footer>
+      </div>
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsAndroidModalOpen(true)}
-              className="text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 font-bold flex items-center gap-1 text-[11px] cursor-pointer"
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Instal di Android</span>
-            </button>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-            <button
-              onClick={handleResetData}
-              className="text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center gap-1.5 text-[11px] font-medium cursor-pointer"
-              title="Reset data cloud ke contoh bawaan"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Reset Data Firestore</span>
-            </button>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">Cloud Database Storage</span>
-          </div>
-        </div>
-      </footer>
+      {/* Global Command Palette Spotlight Search Modal */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onNavigate={setActiveTab}
+        onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
+        onOpenQuickScan={() => setActiveTab('receipt')}
+        onSelectTransaction={(tx) => setSelectedTransactionDetail(tx)}
+        accounts={accounts}
+        transactions={transactions}
+        debts={debts}
+        goals={goals}
+        budgets={budgets}
+        isPrivacyMode={isPrivacyMode}
+        onTogglePrivacy={handleTogglePrivacy}
+      />
 
       {/* Android Mobile Native Bottom Navigation Bar */}
       <AndroidBottomNav
@@ -710,9 +787,28 @@ export default function App() {
         accountsCount={accounts.length}
       />
 
+      {/* Global Reset Data Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isResetConfirmOpen}
+        title="Reset Seluruh Data Keuangan?"
+        message="Apakah Anda yakin ingin mengatur ulang seluruh data keuangan di cloud Firestore ke data contoh bawaan? Seluruh transaksi, rekening, dan catatan akan di-reset."
+        confirmText="Ya, Reset Data Bawaan"
+        cancelText="Batal"
+        variant="danger"
+        icon="alert"
+        onConfirm={handleExecuteReset}
+        onClose={() => setIsResetConfirmOpen(false)}
+      />
+
+      {/* Theme and Color Palette Selector Modal */}
+      <ThemeSelectorModal
+        isOpen={isThemeModalOpen}
+        onClose={() => setIsThemeModalOpen(false)}
+      />
+
       {/* Global Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-50 p-3.5 sm:p-4 bg-slate-900 text-white rounded-2xl text-xs font-semibold shadow-xl border border-slate-800 flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-20 lg:bottom-6 right-4 sm:right-6 z-50 p-3.5 sm:p-4 bg-slate-900 text-white rounded-2xl text-xs font-semibold shadow-xl border border-slate-800 flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-2">
           <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
             <Check className="w-3.5 h-3.5" />
           </div>

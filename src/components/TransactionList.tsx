@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Transaction, Account } from '../types/finance';
 import { formatRupiah, formatDateIndo } from '../utils/formatters';
 import { computeRunningBalances, getCashSummary } from '../utils/cashflow';
+import { ConfirmModal } from './ConfirmModal';
 import {
   Search,
   Filter,
@@ -21,11 +22,14 @@ import {
   Sparkles,
   Info,
   Clock,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 
 interface TransactionListProps {
   transactions: Transaction[];
   accounts: Account[];
+  isPrivacyMode?: boolean;
   onOpenNewTransaction: () => void;
   onEditTransaction: (transaction: Transaction) => void;
   onDeleteTransaction: (transactionId: string) => void;
@@ -35,6 +39,7 @@ interface TransactionListProps {
 export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
   accounts,
+  isPrivacyMode = false,
   onOpenNewTransaction,
   onEditTransaction,
   onDeleteTransaction,
@@ -46,6 +51,17 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'>('date_desc');
+  const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
+  const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+
+  // Helper for masking amounts if privacy mode is on
+  const formatMoney = (amount: number) => {
+    if (isPrivacyMode) {
+      return 'Rp ••••••••';
+    }
+    return formatRupiah(amount);
+  };
 
   // Perhitungan Sisa Kas & Running Balance kronologis (dimulai dari Rp 0)
   const { balanceMap, latestBalance } = useMemo(() => {
@@ -180,16 +196,16 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       {/* Sisa Kas & Cashflow Summary Bento Card */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Card 1: Saldo Kas Awal */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 shadow-xs flex flex-col justify-between">
+        <div className="fintech-card rounded-2xl p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Saldo Awal Kas</span>
+            <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Saldo Awal Kas</span>
             <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center text-xs font-black">
               0
             </div>
           </div>
           <div className="mt-2.5">
             <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-              {formatRupiah(0)}
+              {formatMoney(0)}
             </div>
             <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
               Titik awal perhitungan kas
@@ -198,7 +214,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         </div>
 
         {/* Card 2: Total Pemasukan Kas */}
-        <div className="bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/70 dark:border-emerald-800/60 p-4 shadow-xs flex flex-col justify-between">
+        <div className="fintech-card rounded-2xl p-4 flex flex-col justify-between border-emerald-100/90 dark:border-emerald-950/60">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300 uppercase tracking-widest">Total Kas Masuk (+)</span>
             <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
@@ -207,7 +223,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           </div>
           <div className="mt-2.5">
             <div className="text-xl font-black text-emerald-950 dark:text-emerald-200 font-mono">
-              +{formatRupiah(cashSummary.totalIncome)}
+              +{formatMoney(cashSummary.totalIncome)}
             </div>
             <div className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
               Pemasukan & penerimaan piutang
@@ -216,7 +232,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         </div>
 
         {/* Card 3: Total Pengeluaran Kas & Cicilan */}
-        <div className="bg-rose-50/70 dark:bg-rose-950/30 rounded-2xl border border-rose-200/70 dark:border-rose-800/60 p-4 shadow-xs flex flex-col justify-between">
+        <div className="fintech-card rounded-2xl p-4 flex flex-col justify-between border-rose-100/90 dark:border-rose-950/60">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-rose-800 dark:text-rose-300 uppercase tracking-widest">Total Kas Keluar (-)</span>
             <div className="w-7 h-7 rounded-lg bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 flex items-center justify-center">
@@ -225,7 +241,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           </div>
           <div className="mt-2.5">
             <div className="text-xl font-black text-rose-950 dark:text-rose-200 font-mono">
-              -{formatRupiah(cashSummary.totalExpense)}
+              -{formatMoney(cashSummary.totalExpense)}
             </div>
             <div className="text-[11px] text-rose-800/80 dark:text-rose-300/80 mt-0.5">
               Pengeluaran & pembayaran cicilan
@@ -234,7 +250,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         </div>
 
         {/* Card 4: Sisa Kas Terkini / Terakhir */}
-        <div className="bg-slate-950 dark:bg-slate-900 rounded-2xl border border-slate-800 p-4 text-white shadow-md flex flex-col justify-between relative overflow-hidden ring-1 ring-slate-800">
+        <div className="rounded-2xl p-4 text-white shadow-md flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-slate-900 via-[#0B0F19] to-indigo-950 border border-slate-800">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-indigo-300 uppercase tracking-widest">Sisa Kas Terkini</span>
             <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center">
@@ -243,7 +259,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           </div>
           <div className="mt-2.5">
             <div className="text-xl font-black text-white font-mono">
-              {formatRupiah(cashSummary.currentSisaKas)}
+              {formatMoney(cashSummary.currentSisaKas)}
             </div>
             <div className="flex items-center gap-1 text-[11px] text-slate-300 mt-0.5 truncate">
               <Clock className="w-3 h-3 text-indigo-400 shrink-0" />
@@ -362,6 +378,38 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
       {/* Transaction Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm transition-colors">
+        {/* Bulk Action Toolbar if items are selected */}
+        {selectedTxIds.length > 0 && (
+          <div className="bg-indigo-50 dark:bg-indigo-950/80 border-b border-indigo-100 dark:border-indigo-900/60 p-3 sm:px-6 flex items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">
+                {selectedTxIds.length}
+              </span>
+              <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                {selectedTxIds.length} transaksi dipilih
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedTxIds([])}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-indigo-100/60 dark:hover:bg-indigo-900/40 transition-colors cursor-pointer"
+              >
+                Batal Pilih
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBulkDeleteModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus ({selectedTxIds.length})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {filteredList.length === 0 ? (
           <div className="py-16 px-6 flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500 space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -404,14 +452,34 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               const isExpense = tx.type === 'expense';
               const isIncome = tx.type === 'income';
               const runningKas = balanceMap.get(tx.id) ?? 0;
+              const isSelected = selectedTxIds.includes(tx.id);
 
               return (
                 <div
                   key={tx.id}
-                  className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                  className={`p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${
+                    isSelected ? 'bg-indigo-50/50 dark:bg-indigo-950/30' : ''
+                  }`}
                 >
-                  {/* Left info */}
-                  <div className="flex items-start gap-3.5 min-w-0">
+                  {/* Left info with selection checkbox */}
+                  <div className="flex items-start gap-3 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTxIds((prev) =>
+                          prev.includes(tx.id) ? prev.filter((id) => id !== tx.id) : [...prev, tx.id]
+                        );
+                      }}
+                      className="mt-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer shrink-0 transition-colors"
+                      title={isSelected ? 'Batalkan pilihan' : 'Pilih transaksi'}
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      ) : (
+                        <Square className="w-5 h-5" />
+                      )}
+                    </button>
+
                     <div
                       className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 mt-0.5 font-bold ${
                         isExpense
@@ -451,7 +519,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                           }`}
                           title="Sisa Kas Berjalan setelah transaksi ini dieksekusi (dihitung dari saldo awal Rp 0)"
                         >
-                          Sisa Kas: {formatRupiah(runningKas)}
+                          Sisa Kas: {formatMoney(runningKas)}
                         </span>
                       </div>
 
@@ -491,7 +559,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
                     <div className="text-right">
                       <div
-                        className={`text-sm font-bold ${
+                        className={`text-sm font-bold font-mono tabular-nums ${
                           isExpense
                             ? 'text-rose-600 dark:text-rose-400'
                             : isIncome
@@ -500,10 +568,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         }`}
                       >
                         {isExpense ? '-' : isIncome ? '+' : ''}
-                        {formatRupiah(tx.amount)}
+                        {formatMoney(tx.amount)}
                       </div>
                       <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                        Sisa: {formatRupiah(runningKas)}
+                        Sisa: {formatMoney(runningKas)}
                       </div>
                     </div>
 
@@ -523,11 +591,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => {
-                          if (confirm(`Hapus transaksi "${tx.title}"?`)) {
-                            onDeleteTransaction(tx.id);
-                          }
-                        }}
+                        onClick={() => setTxToDelete(tx)}
                         className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors cursor-pointer"
                         title="Hapus Transaksi"
                       >
@@ -541,6 +605,48 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           </div>
         )}
       </div>
+
+      {/* Single Transaction Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!txToDelete}
+        title="Hapus Transaksi Ini?"
+        message={
+          txToDelete
+            ? `Apakah Anda yakin ingin menghapus transaksi "${txToDelete.title}" senilai ${formatRupiah(
+                txToDelete.amount
+              )}? Sisa kas dan saldo akun terkait akan otomatis disesuaikan kembali.`
+            : ''
+        }
+        confirmText="Ya, Hapus Transaksi"
+        cancelText="Batal"
+        variant="danger"
+        icon="trash"
+        onConfirm={() => {
+          if (txToDelete) {
+            onDeleteTransaction(txToDelete.id);
+            setSelectedTxIds((prev) => prev.filter((id) => id !== txToDelete.id));
+            setTxToDelete(null);
+          }
+        }}
+        onClose={() => setTxToDelete(null)}
+      />
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isBulkDeleteModalOpen}
+        title={`Hapus ${selectedTxIds.length} Transaksi Terpilih?`}
+        message={`Apakah Anda yakin ingin menghapus ${selectedTxIds.length} transaksi yang dipilih? Seluruh data tersebut akan dihapus permanen dari Firebase Firestore dan saldo kas akan dihitung ulang secara otomatis.`}
+        confirmText={`Ya, Hapus ${selectedTxIds.length} Transaksi`}
+        cancelText="Batal"
+        variant="danger"
+        icon="trash"
+        onConfirm={() => {
+          selectedTxIds.forEach((id) => onDeleteTransaction(id));
+          setSelectedTxIds([]);
+          setIsBulkDeleteModalOpen(false);
+        }}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+      />
     </div>
   );
 };

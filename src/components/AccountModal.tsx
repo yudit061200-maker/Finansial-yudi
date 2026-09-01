@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Account, AccountType, BankProvider } from '../types/finance';
 import { formatRupiah } from '../utils/formatters';
+import { ConfirmModal } from './ConfirmModal';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -99,6 +100,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   // Deletion options
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTransactionsAlso, setDeleteTransactionsAlso] = useState(false);
+  const [isResetBalanceModalOpen, setIsResetBalanceModalOpen] = useState(false);
+  const [isClearTxModalOpen, setIsClearTxModalOpen] = useState(false);
 
   useEffect(() => {
     if (editAccount) {
@@ -191,12 +194,25 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       setBalance('0');
       return;
     }
-    if (confirm(`Reset saldo akun "${editAccount.name}" menjadi Rp 0?`)) {
-      setBalance('0');
-      if (onResetBalance) {
-        onResetBalance(editAccount.id);
-        onClose();
-      }
+    setIsResetBalanceModalOpen(true);
+  };
+
+  const handleExecuteResetBalance = () => {
+    if (!editAccount) return;
+    setBalance('0');
+    if (onResetBalance) {
+      onResetBalance(editAccount.id);
+      setIsResetBalanceModalOpen(false);
+      onClose();
+    }
+  };
+
+  const handleExecuteClearTransactions = () => {
+    if (!editAccount) return;
+    if (onClearTransactions) {
+      onClearTransactions(editAccount.id);
+      setIsClearTxModalOpen(false);
+      onClose();
     }
   };
 
@@ -478,12 +494,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                   {onClearTransactions && (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (confirm(`Bersihkan semua transaksi yang tercatat pada rekening "${editAccount.name}"?`)) {
-                          onClearTransactions(editAccount.id);
-                          onClose();
-                        }
-                      }}
+                      onClick={() => setIsClearTxModalOpen(true)}
                       className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -565,6 +576,40 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Reset Balance Confirm Modal */}
+      <ConfirmModal
+        isOpen={isResetBalanceModalOpen}
+        title="Kosongkan Saldo Akun?"
+        message={
+          editAccount
+            ? `Apakah Anda yakin ingin mereset saldo akun "${editAccount.name}" menjadi Rp 0?`
+            : ''
+        }
+        confirmText="Ya, Reset Saldo"
+        cancelText="Batal"
+        variant="warning"
+        icon="alert"
+        onConfirm={handleExecuteResetBalance}
+        onClose={() => setIsResetBalanceModalOpen(false)}
+      />
+
+      {/* Clear Account Transactions Confirm Modal */}
+      <ConfirmModal
+        isOpen={isClearTxModalOpen}
+        title="Bersihkan Transaksi Akun?"
+        message={
+          editAccount
+            ? `Apakah Anda yakin ingin menghapus semua riwayat transaksi yang terkait dengan rekening "${editAccount.name}"? Tindakan ini tidak dapat dibatalkan.`
+            : ''
+        }
+        confirmText="Ya, Bersihkan Transaksi"
+        cancelText="Batal"
+        variant="danger"
+        icon="trash"
+        onConfirm={handleExecuteClearTransactions}
+        onClose={() => setIsClearTxModalOpen(false)}
+      />
     </div>
   );
 };

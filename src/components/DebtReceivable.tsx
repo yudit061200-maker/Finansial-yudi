@@ -23,6 +23,7 @@ import {
 import { getCashSummary } from '../utils/cashflow';
 import { MonthlyCreditCalculator } from './MonthlyCreditCalculator';
 import { PaymentCalendar } from './PaymentCalendar';
+import { ConfirmModal } from './ConfirmModal';
 import {
   HandCoins,
   ArrowUpRight,
@@ -64,6 +65,12 @@ import {
   Copy,
   FileText,
   MessageSquare,
+  LayoutGrid,
+  LayoutList,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  ArrowUpDown,
 } from 'lucide-react';
 
 interface DebtReceivableProps {
@@ -90,12 +97,19 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | DebtStatus | 'overdue'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'dueDate' | 'amount' | 'createdAt' | 'lateDays'>('dueDate');
+  const [displayMode, setDisplayMode] = useState<'grouped' | 'cards' | 'table'>('grouped');
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DebtRecord | null>(null);
   const [modalDefaultType, setModalDefaultType] = useState<DebtType | undefined>(undefined);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [debtToDelete, setDebtToDelete] = useState<DebtRecord | null>(null);
 
   // Notes Modal State (Fitur Catatan Hutang & Piutang)
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
@@ -297,6 +311,28 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
   }, [debts, activeTab, statusFilter, searchQuery, sortBy]);
+
+  // Grouped Categorization for clean organized layout
+  const categorizedDebts = useMemo(() => {
+    const installments = filteredDebts.filter((d) => d.type === 'installment' || d.isInstallment);
+    const payables = filteredDebts.filter((d) => d.type === 'payable');
+    const receivables = filteredDebts.filter((d) => d.type === 'receivable');
+    const overdues = filteredDebts.filter((d) => {
+      if (isDebtPaid(d)) return false;
+      return calculateLateFeeAndOverdue(d).isOverdue;
+    });
+
+    return {
+      installments,
+      payables,
+      receivables,
+      overdues,
+      installmentSubtotalRemaining: installments.filter((d) => !isDebtPaid(d)).reduce((sum, d) => sum + d.remainingAmount, 0),
+      installmentSubtotalMonthly: installments.filter((d) => !isDebtPaid(d)).reduce((sum, d) => sum + (d.monthlyInstallment || 0), 0),
+      payableSubtotalRemaining: payables.filter((d) => !isDebtPaid(d)).reduce((sum, d) => sum + d.remainingAmount, 0),
+      receivableSubtotalRemaining: receivables.filter((d) => !isDebtPaid(d)).reduce((sum, d) => sum + d.remainingAmount, 0),
+    };
+  }, [filteredDebts]);
 
   const toggleHistory = (debtId: string) => {
     setExpandedHistories((prev) => ({ ...prev, [debtId]: !prev[debtId] }));
@@ -529,15 +565,468 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
     );
   };
 
+  const DebtCardItem: React.FC<{
+    debt: DebtRecord;
+    isHistoryExpanded: boolean;
+    onToggleHistory: () => void;
+    onOpenPayment: (debt: DebtRecord, monthNum?: number) => void;
+    onOpenNotes: (debt: DebtRecord) => void;
+    onOpenWhatsApp: (debt: DebtRecord) => void;
+    onEdit: (debt: DebtRecord) => void;
+    onDelete: (debtId: string) => void;
+    getDueStatusBadge: (debt: DebtRecord) => React.ReactNode;
+  }> = ({
+    debt,
+    isHistoryExpanded,
+    onToggleHistory,
+    onOpenPayment,
+    onOpenNotes,
+    onOpenWhatsApp,
+    onEdit,
+    onDelete,
+    getDueStatusBadge,
+  }) => {
+    const isInstallment = debt.type === 'installment' || debt.isInstallment;
+    const isPayable = debt.type === 'payable';
+    const isReceivable = debt.type === 'receivable';
+
+    const lateInfo = calculateLateFeeAndOverdue(debt);
+    const isOverdueDebt = debt.status !== 'paid' && lateInfo.isOverdue;
+
+    const tenor = debt.tenorMonths || 12;
+    const paidMonths = debt.paidMonths || 0;
+    const remainingMonths = Math.max(0, tenor - paidMonths);
+    const progressPercent =
+      debt.totalAmount > 0 ? Math.min(100, Math.round((debt.paidAmount / debt.totalAmount) * 100)) : 0;
+
+    return (
+      <div
+        className={`p-5 rounded-3xl bg-white dark:bg-slate-900 border transition-all duration-200 shadow-xs flex flex-col justify-between ${
+          debt.status === 'paid'
+            ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 opacity-90'
+            : isOverdueDebt
+            ? 'border-rose-300 dark:border-rose-800 ring-2 ring-rose-100 dark:ring-rose-950/40 bg-gradient-to-b from-rose-50/30 to-transparent dark:from-rose-950/20'
+            : isInstallment
+            ? 'border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700'
+            : isPayable
+            ? 'border-rose-100 dark:border-rose-900/50 hover:border-rose-300 dark:hover:border-rose-700'
+            : 'border-emerald-100 dark:border-emerald-900/50 hover:border-emerald-300 dark:hover:border-emerald-700'
+        }`}
+      >
+        <div>
+          {/* Top Row: Type, Provider & Due Status */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+                  isOverdueDebt
+                    ? 'bg-rose-100 dark:bg-rose-950 border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-300'
+                    : isInstallment
+                    ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200/60 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400'
+                    : isPayable
+                    ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/60 dark:border-rose-800 text-rose-600 dark:text-rose-400'
+                    : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/60 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {isInstallment ? (
+                  <ShoppingBag className="w-5 h-5" />
+                ) : isPayable ? (
+                  <ArrowUpRight className="w-5 h-5" />
+                ) : (
+                  <ArrowDownLeft className="w-5 h-5" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                      isInstallment
+                        ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                        : isPayable
+                        ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                        : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                    }`}
+                  >
+                    {isInstallment
+                      ? 'Kredit / Cicilan Barang'
+                      : isPayable
+                      ? 'Hutang Tunai'
+                      : 'Piutang Saya'}
+                  </span>
+                  {debt.category && (
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{debt.category}</span>
+                  )}
+                </div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 tracking-tight">
+                  {debt.personName || debt.providerName}
+                </h4>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">{getDueStatusBadge(debt)}</div>
+          </div>
+
+          {/* Title / Item Name */}
+          <div className="mt-3">
+            <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              {isInstallment && <PackageCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
+              <span>{debt.itemName || debt.title}</span>
+            </div>
+            {debt.notes && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5 italic">"{debt.notes}"</p>
+            )}
+          </div>
+
+          {/* LATE PAYMENT & PENALTY ALERT BANNER */}
+          {isOverdueDebt && (
+            <div className="mt-3 p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 text-xs animate-in fade-in">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-rose-950 dark:text-rose-200 block">
+                      Terlambat Pembayaran {lateInfo.daysOverdue} Hari
+                    </span>
+                    <span className="text-[11px] text-rose-700 dark:text-rose-300">
+                      Jatuh tempo: {lateInfo.dueDateFormatted}
+                    </span>
+                  </div>
+                </div>
+
+                {lateInfo.totalLateFeePayable > 0 && (
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-rose-500 block">
+                      Denda Berjalan:
+                    </span>
+                    <span className="text-xs font-black text-rose-700 dark:text-rose-300">
+                      +{formatCurrency(lateInfo.totalLateFeePayable)}
+                    </span>
+                    {lateInfo.isCapped && lateInfo.maxLateFee && (
+                      <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 px-1 py-0.2 rounded border border-amber-300 dark:border-amber-800 block mt-0.5">
+                        🔒 Maks Denda
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {lateInfo.formulaExplanation && (
+                <div className="mt-2 pt-2 border-t border-rose-200/60 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-rose-800 dark:text-rose-300">
+                  <span className="flex items-center gap-1">
+                    <Coins className="w-3 h-3 text-rose-500 shrink-0" />
+                    <span>{lateInfo.formulaExplanation}</span>
+                  </span>
+                  <span className="font-black text-rose-950 dark:text-rose-100 bg-white/70 dark:bg-rose-900/60 px-2 py-0.5 rounded-lg border border-rose-200/80">
+                    Total Tagihan: {formatCurrency(lateInfo.totalWithLateFee)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SPECIAL SECTION: Item Installment Months Tracker */}
+          {isInstallment && (
+            <div className="mt-3.5 p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-indigo-950 dark:text-indigo-200">Status Cicilan:</span>
+                  <span className="font-black text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                    Bulan ke-{paidMonths} dari {tenor} Bulan
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300">
+                  {remainingMonths === 0 ? '🎉 Lunas' : `Sisa ${remainingMonths} Bulan`}
+                </span>
+              </div>
+
+              {/* Visual Month Tracker Pills */}
+              <div className="flex flex-wrap gap-1 mt-2">
+                {Array.from({ length: tenor }).map((_, index) => {
+                  const monthIdx = index + 1;
+                  const isPaid = monthIdx <= paidMonths;
+                  const isCurrentNext = monthIdx === paidMonths + 1;
+                  const isOverduePill = isCurrentNext && isOverdueDebt;
+
+                  return (
+                    <div
+                      key={monthIdx}
+                      title={`Bulan ${monthIdx}: ${
+                        isPaid
+                          ? 'Sudah Dibayar'
+                          : isOverduePill
+                          ? `Terlambat ${lateInfo.daysOverdue} Hari`
+                          : isCurrentNext
+                          ? 'Jatuh Tempo Berikutnya'
+                          : 'Belum Dibayar'
+                      }`}
+                      className={`h-6 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
+                        isPaid
+                          ? 'bg-emerald-500 text-white shadow-2xs'
+                          : isOverduePill
+                          ? 'bg-rose-600 text-white border border-rose-700 ring-2 ring-rose-300 animate-pulse'
+                          : isCurrentNext
+                          ? 'bg-amber-400 text-amber-950 border border-amber-500 ring-2 ring-amber-300 animate-pulse'
+                          : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {isPaid && <Check className="w-2.5 h-2.5" />}
+                      {isOverduePill && <AlertTriangle className="w-2.5 h-2.5" />}
+                      <span>Bln {monthIdx}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {debt.monthlyInstallment && debt.monthlyInstallment > 0 && (
+                <div className="mt-2.5 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/60 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
+                  <span>
+                    Angsuran: <strong className="text-slate-900 dark:text-white">{formatCurrency(debt.monthlyInstallment)}</strong> / bln
+                  </span>
+                  {debt.dueDayOfMonth && (
+                    <span className="text-slate-500 dark:text-slate-400">
+                      Tiap tanggal <strong>{debt.dueDayOfMonth}</strong>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Financial Metrics Box */}
+          <div className="mt-3.5 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-slate-500 dark:text-slate-400">Sisa Kewajiban:</span>
+              <span
+                className={`font-black text-sm ${
+                  debt.status === 'paid'
+                    ? 'text-slate-400 dark:text-slate-500 line-through'
+                    : isInstallment
+                    ? 'text-indigo-700 dark:text-indigo-400'
+                    : isPayable
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {formatCurrency(debt.remainingAmount)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+              <span>Total: {formatCurrency(debt.totalAmount)}</span>
+              <span>Sudah Bayar: {formatCurrency(debt.paidAmount)}</span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mt-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  debt.status === 'paid'
+                    ? 'bg-emerald-500'
+                    : isInstallment
+                    ? 'bg-indigo-600 dark:bg-indigo-500'
+                    : isPayable
+                    ? 'bg-rose-500'
+                    : 'bg-emerald-500'
+                }`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 font-semibold">
+              <span>Mulai: {debt.startDate ? formatDateIndo(debt.startDate) : '-'}</span>
+              {debt.status !== 'paid' ? (
+                <span className={`font-bold flex items-center gap-1 ${isOverdueDebt ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                  {isOverdueDebt ? <AlertTriangle className="w-3 h-3 text-rose-500" /> : <Calendar className="w-3 h-3 text-indigo-500" />}
+                  <span>Jatuh tempo: {getNearestDueInfo(debt.dueDayOfMonth, debt.dueDate, debt.status).formattedDate}</span>
+                </span>
+              ) : (
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold">100% Lunas</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Actions & Payment Button Toolbar */}
+        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            {debt.status !== 'paid' ? (
+              <button
+                onClick={() => onOpenPayment(debt)}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer text-white ${
+                  isOverdueDebt
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200 dark:shadow-none animate-pulse'
+                    : isInstallment
+                    ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 dark:shadow-none'
+                    : isPayable
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100 dark:shadow-none'
+                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100 dark:shadow-none'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>
+                  {isInstallment
+                    ? isOverdueDebt
+                      ? `Bayar Cicilan (Telat ${lateInfo.daysOverdue} Hari)`
+                      : `Bayar Cicilan Bln ke-${paidMonths + 1}`
+                    : isPayable
+                    ? isOverdueDebt
+                      ? `Bayar Hutang (Telat ${lateInfo.daysOverdue} Hari)`
+                      : 'Bayar Angsuran'
+                    : 'Terima Pembayaran'}
+                </span>
+              </button>
+            ) : (
+              <div className="flex-1 py-2 px-3 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Kredit Telah Lunas Penuh</span>
+              </div>
+            )}
+
+            {/* WhatsApp Reminder (Piutang only) */}
+            {isReceivable && debt.status !== 'paid' && debt.contactPhone && (
+              <button
+                onClick={() => onOpenWhatsApp(debt)}
+                title="Kirim pengingat tagihan via WhatsApp"
+                className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer"
+              >
+                <Phone className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Edit & Delete Buttons */}
+            <button
+              onClick={() => onEdit(debt)}
+              title="Edit data cicilan"
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              onClick={() => setDebtToDelete(debt)}
+              title="Hapus catatan"
+              className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Notes & Memo Action Button */}
+          <button
+            onClick={() => onOpenNotes(debt)}
+            className="w-full py-1.5 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
+            title="Lihat & Tambah Catatan Hutang / Piutang"
+          >
+            <div className="flex items-center gap-1.5">
+              <NotebookPen className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Catatan & Janji Bayar</span>
+              {debt.debtNotes && debt.debtNotes.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-extrabold">
+                  {debt.debtNotes.length}
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5">
+              <Plus className="w-3 h-3" />
+              <span>Catatan</span>
+            </span>
+          </button>
+
+          {/* Excerpt of most recent note if exists */}
+          {debt.debtNotes && debt.debtNotes.length > 0 && (
+            <div
+              onClick={() => onOpenNotes(debt)}
+              className="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/40 text-[11px] cursor-pointer hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
+              title="Klik untuk membuka riwayat catatan lengkap"
+            >
+              <div className="flex items-center justify-between text-[10px] text-amber-800 dark:text-amber-300 font-bold mb-0.5">
+                <span className="flex items-center gap-1">
+                  <StickyNote className="w-3 h-3 text-amber-600" />
+                  <span>Catatan Terakhir ({formatDateIndo(debt.debtNotes[0].date)}):</span>
+                </span>
+                <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.2 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
+                  {debt.debtNotes[0].category === 'janji_bayar' ? 'Janji Bayar' : debt.debtNotes[0].category === 'perjanjian' ? 'Perjanjian' : debt.debtNotes[0].category === 'konfirmasi' ? 'Konfirmasi' : debt.debtNotes[0].category === 'keringanan' ? 'Keringanan' : 'Catatan'}
+                </span>
+              </div>
+              <p className="text-slate-700 dark:text-slate-300 line-clamp-2 italic font-medium">
+                "{debt.debtNotes[0].content}"
+              </p>
+            </div>
+          )}
+
+          {/* Payment History Accordion */}
+          {debt.payments && debt.payments.length > 0 && (
+            <div>
+              <button
+                onClick={onToggleHistory}
+                className="w-full text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-between py-1 px-1 cursor-pointer transition-colors"
+              >
+                <span className="flex items-center gap-1">
+                  <History className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                  Riwayat Pembayaran ({debt.payments.length} transaksi)
+                </span>
+                <span>{isHistoryExpanded ? 'Sembunyikan ▲' : 'Lihat Detail ▼'}</span>
+              </button>
+
+              {isHistoryExpanded && (
+                <div className="mt-1.5 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {debt.payments.map((pay) => (
+                    <div
+                      key={pay.id}
+                      className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-[11px] flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
+                          {pay.monthNumber && (
+                            <span className="px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[9px] font-extrabold">
+                              Bulan {pay.monthNumber}
+                            </span>
+                          )}
+                          <span>{formatCurrency(pay.amount)}</span>
+                          {pay.lateFeePaid && pay.lateFeePaid > 0 && (
+                            <span className="px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-[9px] font-extrabold flex items-center gap-0.5">
+                              <AlertTriangle className="w-2.5 h-2.5" />
+                              +Denda {formatCurrency(pay.lateFeePaid)} ({pay.daysLate} hr)
+                            </span>
+                          )}
+                          {pay.waivedLateFee && pay.waivedLateFee > 0 && (
+                            <span className="px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[9px] font-extrabold">
+                              Denda Dibebaskan
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{pay.notes || pay.date}</div>
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{pay.date}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in select-none">
-      {/* Top Header Summary Cards */}
+      {/* Top Header Summary Cards (Clickable for Instant Filtering) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Total Kredit Barang & Cicilan */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 shadow-sm relative overflow-hidden transition-colors">
+        <div
+          onClick={() => setActiveTab(activeTab === 'installment' ? 'all' : 'installment')}
+          className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border shadow-sm relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${
+            activeTab === 'installment'
+              ? 'border-indigo-500 ring-2 ring-indigo-500/20 dark:ring-indigo-500/30'
+              : 'border-indigo-100 dark:border-slate-800 hover:border-indigo-300'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
-              Kredit Barang Aktif
+              Kredit Barang
             </span>
             <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
               <ShoppingBag className="w-4 h-4" />
@@ -553,7 +1042,14 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         </div>
 
         {/* Card 2: Total Hutang Pinjaman (Kewajiban) */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden transition-colors">
+        <div
+          onClick={() => setActiveTab(activeTab === 'payable' ? 'all' : 'payable')}
+          className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border shadow-sm relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${
+            activeTab === 'payable'
+              ? 'border-rose-500 ring-2 ring-rose-500/20 dark:ring-rose-500/30'
+              : 'border-slate-200/80 dark:border-slate-800 hover:border-rose-300'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Pinjaman / Hutang Tunai
@@ -572,7 +1068,14 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         </div>
 
         {/* Card 3: Total Piutang (Hak Tagih) */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-hidden transition-colors">
+        <div
+          onClick={() => setActiveTab(activeTab === 'receivable' ? 'all' : 'receivable')}
+          className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border shadow-sm relative overflow-hidden transition-all cursor-pointer hover:shadow-md ${
+            activeTab === 'receivable'
+              ? 'border-emerald-500 ring-2 ring-emerald-500/20 dark:ring-emerald-500/30'
+              : 'border-slate-200/80 dark:border-slate-800 hover:border-emerald-300'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Piutang (Uang Dipinjamkan)
@@ -591,7 +1094,14 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         </div>
 
         {/* Card 4: Posisi Bersih & Urgensi */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 dark:from-slate-800 dark:to-slate-900 text-white shadow-md relative overflow-hidden flex flex-col justify-between border border-slate-800 dark:border-slate-700">
+        <div
+          onClick={() => setActiveTab('all')}
+          className={`p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 dark:from-slate-800 dark:to-slate-900 text-white shadow-md relative overflow-hidden flex flex-col justify-between border cursor-pointer transition-all hover:shadow-lg ${
+            activeTab === 'all'
+              ? 'border-indigo-400 ring-2 ring-indigo-400/30'
+              : 'border-slate-800 dark:border-slate-700'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-indigo-200 dark:text-indigo-300 uppercase tracking-wider">
               Total Seluruh Kewajiban
@@ -810,60 +1320,115 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
             </div>
           </div>
 
-          {/* Control Bar: Filters, Search, and Add Button */}
-          <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row gap-3 items-center justify-between transition-colors">
-            {/* Left Side: Tab Type Switch */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl w-full lg:w-auto overflow-x-auto scrollbar-none">
-              <button
-                onClick={() => setActiveTab('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  activeTab === 'all' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Semua ({debts.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('installment')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'installment' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <ShoppingBag className="w-3.5 h-3.5" />
-                <span>Kredit Barang ({debts.filter((d) => d.type === 'installment' || d.isInstallment).length})</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('payable')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
-                  activeTab === 'payable' ? 'bg-rose-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <ArrowUpRight className="w-3.5 h-3.5" />
-                <span>Hutang Tunai ({debts.filter((d) => d.type === 'payable').length})</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('receivable')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 ${
-                  activeTab === 'receivable' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                <ArrowDownLeft className="w-3.5 h-3.5" />
-                <span>Piutang ({debts.filter((d) => d.type === 'receivable').length})</span>
-              </button>
-              {summary.overdueCount > 0 && (
+          {/* Control Bar: Filters, Search, View Mode Switcher, and Add Button */}
+          <div className="p-4 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-3 transition-colors">
+            {/* Top Row: Category Tabs & View Mode Switcher */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+              {/* Category Segmented Tabs */}
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl overflow-x-auto scrollbar-none gap-1">
                 <button
-                  onClick={() => setActiveTab('overdue')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 animate-pulse ${
-                    activeTab === 'overdue' ? 'bg-rose-600 text-white shadow-xs' : 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 hover:bg-rose-200'
+                  onClick={() => setActiveTab('all')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'all'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>Telat Bayar ({summary.overdueCount})</span>
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Semua Terpadu ({debts.length})</span>
                 </button>
-              )}
+                <button
+                  onClick={() => setActiveTab('installment')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'installment'
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>Kredit Barang ({debts.filter((d) => d.type === 'installment' || d.isInstallment).length})</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('payable')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'payable'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                  <span>Hutang Tunai ({debts.filter((d) => d.type === 'payable').length})</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('receivable')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'receivable'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ArrowDownLeft className="w-3.5 h-3.5" />
+                  <span>Piutang ({debts.filter((d) => d.type === 'receivable').length})</span>
+                </button>
+                {summary.overdueCount > 0 && (
+                  <button
+                    onClick={() => setActiveTab('overdue')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 animate-pulse ${
+                      activeTab === 'overdue'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 hover:bg-rose-200'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Telat Bayar ({summary.overdueCount})</span>
+                  </button>
+                )}
+              </div>
+
+              {/* View Layout Mode (Terkelompok / Kartu Grid / Tabel Rapi) */}
+              <div className="flex items-center justify-end gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl shrink-0 self-end md:self-auto">
+                <button
+                  onClick={() => setDisplayMode('grouped')}
+                  title="Tampilan Terkelompok per Kategori"
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    displayMode === 'grouped'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Terkelompok</span>
+                </button>
+                <button
+                  onClick={() => setDisplayMode('cards')}
+                  title="Tampilan Grid Kartu"
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    displayMode === 'cards'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Kartu</span>
+                </button>
+                <button
+                  onClick={() => setDisplayMode('table')}
+                  title="Tampilan Tabel Rapi"
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    displayMode === 'table'
+                      ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
+                  }`}
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Tabel</span>
+                </button>
+              </div>
             </div>
 
-            {/* Middle: Search & Filter */}
-            <div className="flex items-center gap-2 w-full lg:w-auto flex-1 max-w-md">
+            {/* Bottom Row: Search, Filter, Sort & Add */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+              {/* Search Bar */}
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -871,14 +1436,15 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                   placeholder="Cari barang, lembaga (Kredivo/Spay), atau nama..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                 />
               </div>
 
+              {/* Status Filter */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
               >
                 <option value="all">Semua Status</option>
                 <option value="unpaid">Belum Lunas</option>
@@ -886,489 +1452,579 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 <option value="overdue">⚠️ Telat Bayar (Overdue)</option>
                 <option value="paid">Sudah Lunas</option>
               </select>
-            </div>
 
-            {/* Right: Add Button */}
-            <button
-              onClick={() => {
-                setEditingDebt(null);
-                setIsModalOpen(true);
-              }}
-              className="w-full lg:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Catatan</span>
-            </button>
-          </div>
-
-      {/* Debts & Installments List */}
-      {filteredDebts.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-slate-300">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-3">
-            <ShoppingBag className="w-7 h-7" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900">Belum Ada Catatan Kredit / Hutang</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-            Gunakan fitur kredit barang untuk memantau angsuran gadget, kendaraan, paylater, atau pinjaman tunai Anda.
-          </p>
-          <div className="flex items-center justify-center gap-2 mt-4">
-            <button
-              onClick={() => setIsCalculatorOpen(true)}
-              className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
-            >
-              🧮 Buka Simulasi Kredit
-            </button>
-            <button
-              onClick={() => {
-                setEditingDebt(null);
-                setIsModalOpen(true);
-              }}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
-            >
-              + Buat Catatan Baru
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredDebts.map((debt) => {
-            const isInstallment = debt.type === 'installment' || debt.isInstallment;
-            const isPayable = debt.type === 'payable';
-            const isReceivable = debt.type === 'receivable';
-
-            const lateInfo = calculateLateFeeAndOverdue(debt);
-            const isOverdueDebt = debt.status !== 'paid' && lateInfo.isOverdue;
-
-            const tenor = debt.tenorMonths || 12;
-            const paidMonths = debt.paidMonths || 0;
-            const remainingMonths = Math.max(0, tenor - paidMonths);
-            const progressPercent =
-              debt.totalAmount > 0 ? Math.min(100, Math.round((debt.paidAmount / debt.totalAmount) * 100)) : 0;
-            const isHistoryExpanded = expandedHistories[debt.id];
-
-            return (
-              <div
-                key={debt.id}
-                className={`p-5 rounded-3xl bg-white dark:bg-slate-900 border transition-all duration-200 shadow-xs flex flex-col justify-between ${
-                  debt.status === 'paid'
-                    ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 opacity-90'
-                    : isOverdueDebt
-                    ? 'border-rose-300 dark:border-rose-800 ring-2 ring-rose-100 dark:ring-rose-950/40 bg-gradient-to-b from-rose-50/30 to-transparent dark:from-rose-950/20'
-                    : isInstallment
-                    ? 'border-indigo-100 dark:border-indigo-900/50 hover:border-indigo-300 dark:hover:border-indigo-700'
-                    : isPayable
-                    ? 'border-rose-100 dark:border-rose-900/50 hover:border-rose-300 dark:hover:border-rose-700'
-                    : 'border-emerald-100 dark:border-emerald-900/50 hover:border-emerald-300 dark:hover:border-emerald-700'
-                }`}
+              {/* Sort Order */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
               >
-                <div>
-                  {/* Top Row: Type, Provider & Due Status */}
-                  <div className="flex items-start justify-between gap-2">
+                <option value="dueDate">⏱️ Jatuh Tempo Terdekat</option>
+                <option value="amount">💰 Nominal Terbesar</option>
+                <option value="lateDays">⚠️ Hari Telat Terbanyak</option>
+                <option value="createdAt">📅 Terbaru Ditambahkan</option>
+              </select>
+
+              {/* Add Button */}
+              <button
+                onClick={() => {
+                  setEditingDebt(null);
+                  setModalDefaultType(activeTab === 'installment' ? 'installment' : activeTab === 'payable' ? 'payable' : activeTab === 'receivable' ? 'receivable' : undefined);
+                  setIsModalOpen(true);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Catat Baru</span>
+              </button>
+            </div>
+          </div>
+
+          {/* MAIN CONTENT DISPLAY: Grouped Sections vs Cards Grid vs Compact Table */}
+          {filteredDebts.length === 0 ? (
+            <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-3">
+                <ShoppingBag className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Tidak Ada Data Ditemukan</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1">
+                {searchQuery || statusFilter !== 'all'
+                  ? 'Coba sesuaikan kata kunci pencarian atau filter status untuk melihat data lainnya.'
+                  : 'Gunakan tombol di bawah untuk mencatat cicilan gadget/kendaraan, hutang tunai, atau piutang baru.'}
+              </p>
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <button
+                  onClick={() => setIsCalculatorOpen(true)}
+                  className="px-4 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  🧮 Buka Simulasi Kredit
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingDebt(null);
+                    setIsModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer"
+                >
+                  + Buat Catatan Baru
+                </button>
+              </div>
+            </div>
+          ) : displayMode === 'table' ? (
+            /* =========================================================================
+               TAMPILAN 1: TABEL RAPI & HIGH-DENSITY (TABLE VIEW)
+               ========================================================================= */
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs overflow-hidden transition-colors">
+              <div className="p-4 bg-slate-50/70 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LayoutList className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    Tabel Terstruktur Hutang & Kredit ({filteredDebts.length} Data)
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Total Sisa: <strong className="text-slate-900 dark:text-white font-mono">{formatRupiah(filteredDebts.reduce((sum, d) => sum + d.remainingAmount, 0))}</strong>
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100/70 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider font-bold border-b border-slate-200/80 dark:border-slate-700">
+                    <tr>
+                      <th className="py-3 px-4">Tipe & Nama Barang/Pinjaman</th>
+                      <th className="py-3 px-4">Pihak / Lembaga</th>
+                      <th className="py-3 px-4">Jatuh Tempo & Status</th>
+                      <th className="py-3 px-4">Plafon Total</th>
+                      <th className="py-3 px-4">Sisa Tagihan / Angsuran</th>
+                      <th className="py-3 px-4">Progres</th>
+                      <th className="py-3 px-4 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredDebts.map((debt) => {
+                      const isInst = debt.type === 'installment' || debt.isInstallment;
+                      const isPay = debt.type === 'payable';
+                      const isRec = debt.type === 'receivable';
+                      const late = calculateLateFeeAndOverdue(debt);
+                      const isOverdue = debt.status !== 'paid' && late.isOverdue;
+                      const progress = debt.totalAmount > 0 ? Math.min(100, Math.round((debt.paidAmount / debt.totalAmount) * 100)) : 0;
+                      const tenor = debt.tenorMonths || 12;
+                      const paidMonths = debt.paidMonths || 0;
+
+                      return (
+                        <tr
+                          key={debt.id}
+                          className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/60 transition-colors ${
+                            isOverdue ? 'bg-rose-50/30 dark:bg-rose-950/20' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                                  isInst
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200/60 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400'
+                                    : isPay
+                                    ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/60 dark:border-rose-800 text-rose-600 dark:text-rose-400'
+                                    : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/60 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                {isInst ? <ShoppingBag className="w-4 h-4" /> : isPay ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-900 dark:text-white block leading-snug">
+                                  {debt.itemName || debt.title}
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                  {isInst ? 'Kredit Barang' : isPay ? 'Hutang Tunai' : 'Piutang'} {debt.category ? `• ${debt.category}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">
+                            {debt.personName || debt.providerName}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="space-y-1">
+                              <div>{getDueStatusBadge(debt)}</div>
+                              {isOverdue && (
+                                <span className="inline-block text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                                  Telat {late.daysOverdue} hr ({formatCurrency(late.totalLateFeePayable)})
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-white">
+                            {formatCurrency(debt.totalAmount)}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div>
+                              <span
+                                className={`font-mono font-black ${
+                                  debt.status === 'paid'
+                                    ? 'text-slate-400 dark:text-slate-500 line-through'
+                                    : isInst
+                                    ? 'text-indigo-600 dark:text-indigo-400'
+                                    : isPay
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : 'text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                {formatCurrency(debt.remainingAmount)}
+                              </span>
+                              {isInst && debt.monthlyInstallment && debt.monthlyInstallment > 0 && (
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                                  {formatCurrency(debt.monthlyInstallment)} / bln (Tgl {debt.dueDayOfMonth || 5})
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="w-24">
+                              <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 mb-1">
+                                <span>{isInst ? `${paidMonths}/${tenor} bln` : `${progress}%`}</span>
+                              </div>
+                              <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    debt.status === 'paid' ? 'bg-emerald-500' : isInst ? 'bg-indigo-600' : isPay ? 'bg-rose-500' : 'bg-emerald-500'
+                                  }`}
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {debt.status !== 'paid' && (
+                                <button
+                                  onClick={() => handleOpenPaymentModal(debt)}
+                                  className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                                >
+                                  Bayar
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleOpenNotesModal(debt)}
+                                title="Catatan & Janji Bayar"
+                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-slate-600 dark:text-slate-400 hover:text-indigo-600 cursor-pointer relative"
+                              >
+                                <NotebookPen className="w-3.5 h-3.5" />
+                                {debt.debtNotes && debt.debtNotes.length > 0 && (
+                                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-indigo-600 text-white text-[8px] font-bold flex items-center justify-center">
+                                    {debt.debtNotes.length}
+                                  </span>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingDebt(debt);
+                                  setIsModalOpen(true);
+                                }}
+                                title="Edit"
+                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setDebtToDelete(debt)}
+                                title="Hapus"
+                                className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-600 dark:text-rose-400 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : displayMode === 'grouped' && activeTab === 'all' ? (
+            /* =========================================================================
+               TAMPILAN 2: TERKELOMPOK PER KATEGORI (GROUPED SECTIONS - ANTI-TUMPUK)
+               ========================================================================= */
+            <div className="space-y-6">
+              {/* SECTION 0: ALERT PANEL JIKA ADA JATUH TEMPO TELAT (OVERDUE) */}
+              {categorizedDebts.overdues.length > 0 && (
+                <div className="p-4 sm:p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 shadow-xs space-y-3 animate-in fade-in">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
-                          isOverdueDebt
-                            ? 'bg-rose-100 dark:bg-rose-950 border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-300'
-                            : isInstallment
-                            ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200/60 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400'
-                            : isPayable
-                            ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200/60 dark:border-rose-800 text-rose-600 dark:text-rose-400'
-                            : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/60 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
-                        }`}
-                      >
-                        {isInstallment ? (
-                          <ShoppingBag className="w-5 h-5" />
-                        ) : isPayable ? (
-                          <ArrowUpRight className="w-5 h-5" />
-                        ) : (
-                          <ArrowDownLeft className="w-5 h-5" />
-                        )}
+                      <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
+                        <AlertTriangle className="w-5 h-5 animate-pulse" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                              isInstallment
-                                ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                                : isPayable
-                                ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
-                                : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                            }`}
-                          >
-                            {isInstallment
-                              ? 'Kredit / Cicilan Barang'
-                              : isPayable
-                              ? 'Hutang Tunai'
-                              : 'Piutang Saya'}
-                          </span>
-                          {debt.category && (
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{debt.category}</span>
-                          )}
-                        </div>
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 tracking-tight">
-                          {debt.personName || debt.providerName}
+                        <h4 className="font-extrabold text-sm text-rose-950 dark:text-rose-200">
+                          ⚠️ Perlu Perhatian Segera: {categorizedDebts.overdues.length} Tagihan Terlambat Jatuh Tempo
                         </h4>
+                        <p className="text-xs text-rose-700 dark:text-rose-300">
+                          Denda berjalan total: <strong>{formatCurrency(summary.totalEstimatedLateFee)}</strong>. Segera bayar atau konfirmasi janji bayar.
+                        </p>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-1.5">{getDueStatusBadge(debt)}</div>
                   </div>
 
-                  {/* Title / Item Name */}
-                  <div className="mt-3">
-                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                      {isInstallment && <PackageCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />}
-                      <span>{debt.itemName || debt.title}</span>
-                    </div>
-                    {debt.notes && (
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-0.5 italic">"{debt.notes}"</p>
-                    )}
-                  </div>
-
-                  {/* LATE PAYMENT & PENALTY ALERT BANNER */}
-                  {isOverdueDebt && (
-                    <div className="mt-3 p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 text-xs animate-in fade-in">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                          </div>
-                          <div>
-                            <span className="font-bold text-rose-950 dark:text-rose-200 block">
-                              Terlambat Pembayaran {lateInfo.daysOverdue} Hari
-                            </span>
-                            <span className="text-[11px] text-rose-700 dark:text-rose-300">
-                              Jatuh tempo: {lateInfo.dueDateFormatted}
-                            </span>
-                          </div>
-                        </div>
-
-                        {lateInfo.totalLateFeePayable > 0 && (
-                          <div className="text-right">
-                            <span className="text-[10px] uppercase font-bold text-rose-500 block">
-                              Denda Berjalan:
-                            </span>
-                            <span className="text-xs font-black text-rose-700 dark:text-rose-300">
-                              +{formatCurrency(lateInfo.totalLateFeePayable)}
-                            </span>
-                            {lateInfo.isCapped && lateInfo.maxLateFee && (
-                              <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 px-1 py-0.2 rounded border border-amber-300 dark:border-amber-800 block mt-0.5">
-                                🔒 Maks Denda
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {lateInfo.formulaExplanation && (
-                        <div className="mt-2 pt-2 border-t border-rose-200/60 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-rose-800 dark:text-rose-300">
-                          <span className="flex items-center gap-1">
-                            <Coins className="w-3 h-3 text-rose-500 shrink-0" />
-                            <span>{lateInfo.formulaExplanation}</span>
-                          </span>
-                          <span className="font-black text-rose-950 dark:text-rose-100 bg-white/70 dark:bg-rose-900/60 px-2 py-0.5 rounded-lg border border-rose-200/80">
-                            Total Tagihan Langsung: {formatCurrency(lateInfo.totalWithLateFee)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* SPECIAL SECTION: Item Installment Months Tracker */}
-                  {isInstallment && (
-                    <div className="mt-3.5 p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60">
-                      <div className="flex items-center justify-between text-xs mb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-indigo-950 dark:text-indigo-200">Status Cicilan:</span>
-                          <span className="font-black text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 shadow-2xs">
-                            Bulan ke-{paidMonths} dari {tenor} Bulan
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-bold text-indigo-800 dark:text-indigo-300">
-                          {remainingMonths === 0 ? '🎉 Lunas' : `Sisa ${remainingMonths} Bulan`}
-                        </span>
-                      </div>
-
-                      {/* Visual Month Tracker Pills */}
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {Array.from({ length: tenor }).map((_, index) => {
-                          const monthIdx = index + 1;
-                          const isPaid = monthIdx <= paidMonths;
-                          const isCurrentNext = monthIdx === paidMonths + 1;
-                          const isOverduePill = isCurrentNext && isOverdueDebt;
-
-                          return (
-                            <div
-                              key={monthIdx}
-                              title={`Bulan ${monthIdx}: ${
-                                isPaid
-                                  ? 'Sudah Dibayar'
-                                  : isOverduePill
-                                  ? `Terlambat ${lateInfo.daysOverdue} Hari`
-                                  : isCurrentNext
-                                  ? 'Jatuh Tempo Berikutnya'
-                                  : 'Belum Dibayar'
-                              }`}
-                              className={`h-6 px-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all ${
-                                isPaid
-                                  ? 'bg-emerald-500 text-white shadow-2xs'
-                                  : isOverduePill
-                                  ? 'bg-rose-600 text-white border border-rose-700 ring-2 ring-rose-300 animate-pulse'
-                                  : isCurrentNext
-                                  ? 'bg-amber-400 text-amber-950 border border-amber-500 ring-2 ring-amber-300 animate-pulse'
-                                  : 'bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700'
-                              }`}
-                            >
-                              {isPaid && <Check className="w-2.5 h-2.5" />}
-                              {isOverduePill && <AlertTriangle className="w-2.5 h-2.5" />}
-                              <span>Bln {monthIdx}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {debt.monthlyInstallment && debt.monthlyInstallment > 0 && (
-                        <div className="mt-2.5 pt-2 border-t border-indigo-100/80 dark:border-indigo-900/60 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
-                          <span>
-                            Angsuran: <strong className="text-slate-900 dark:text-white">{formatCurrency(debt.monthlyInstallment)}</strong> / bln
-                          </span>
-                          {debt.dueDayOfMonth && (
-                            <span className="text-slate-500 dark:text-slate-400">
-                              Tiap tanggal <strong>{debt.dueDayOfMonth}</strong>
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Financial Metrics Box */}
-                  <div className="mt-3.5 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-slate-500 dark:text-slate-400">Sisa Kewajiban:</span>
-                      <span
-                        className={`font-black text-sm ${
-                          debt.status === 'paid'
-                            ? 'text-slate-400 dark:text-slate-500 line-through'
-                            : isInstallment
-                            ? 'text-indigo-700 dark:text-indigo-400'
-                            : isPayable
-                            ? 'text-rose-600 dark:text-rose-400'
-                            : 'text-emerald-600 dark:text-emerald-400'
-                        }`}
-                      >
-                        {formatCurrency(debt.remainingAmount)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                      <span>Total: {formatCurrency(debt.totalAmount)}</span>
-                      <span>Sudah Bayar: {formatCurrency(debt.paidAmount)}</span>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="mt-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          debt.status === 'paid'
-                            ? 'bg-emerald-500'
-                            : isInstallment
-                            ? 'bg-indigo-600 dark:bg-indigo-500'
-                            : isPayable
-                            ? 'bg-rose-500'
-                            : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${progressPercent}%` }}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {categorizedDebts.overdues.map((debt) => (
+                      <DebtCardItem
+                        key={debt.id}
+                        debt={debt}
+                        isHistoryExpanded={!!expandedHistories[debt.id]}
+                        onToggleHistory={() => toggleHistory(debt.id)}
+                        onOpenPayment={handleOpenPaymentModal}
+                        onOpenNotes={handleOpenNotesModal}
+                        onOpenWhatsApp={handleOpenWhatsAppReminder}
+                        onEdit={(d) => {
+                          setEditingDebt(d);
+                          setIsModalOpen(true);
+                        }}
+                        onDelete={onDeleteDebt}
+                        getDueStatusBadge={getDueStatusBadge}
                       />
-                    </div>
-
-                    <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 font-semibold">
-                      <span>Mulai: {debt.startDate ? formatDateIndo(debt.startDate) : '-'}</span>
-                      {debt.status !== 'paid' ? (
-                        <span className={`font-bold flex items-center gap-1 ${isOverdueDebt ? 'text-rose-600 dark:text-rose-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                          {isOverdueDebt ? <AlertTriangle className="w-3 h-3 text-rose-500" /> : <Calendar className="w-3 h-3 text-indigo-500" />}
-                          <span>Jatuh tempo: {getNearestDueInfo(debt.dueDayOfMonth, debt.dueDate, debt.status).formattedDate}</span>
-                        </span>
-                      ) : (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">100% Lunas</span>
-                      )}
-                    </div>
+                    ))}
                   </div>
                 </div>
+              )}
 
-                {/* Actions & Payment Button */}
-                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    {debt.status !== 'paid' ? (
-                      <button
-                        onClick={() => handleOpenPaymentModal(debt)}
-                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer text-white ${
-                          isOverdueDebt
-                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200 dark:shadow-none animate-pulse'
-                            : isInstallment
-                            ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100 dark:shadow-none'
-                            : isPayable
-                            ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100 dark:shadow-none'
-                            : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100 dark:shadow-none'
-                        }`}
-                      >
-                        <CreditCard className="w-3.5 h-3.5" />
-                        <span>
-                          {isInstallment
-                            ? isOverdueDebt
-                              ? `Bayar Cicilan (Telat ${lateInfo.daysOverdue} Hari)`
-                              : `Bayar Cicilan Bln ke-${paidMonths + 1}`
-                            : isPayable
-                            ? isOverdueDebt
-                              ? `Bayar Hutang (Telat ${lateInfo.daysOverdue} Hari)`
-                              : 'Bayar Angsuran'
-                            : 'Terima Pembayaran'}
-                        </span>
-                      </button>
-                    ) : (
-                      <div className="flex-1 py-2 px-3 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        <span>Kredit Telah Lunas Penuh</span>
-                      </div>
-                    )}
-
-                    {/* WhatsApp Reminder (Piutang only) */}
-                    {isReceivable && debt.status !== 'paid' && debt.contactPhone && (
-                      <button
-                        onClick={() => handleOpenWhatsAppReminder(debt)}
-                        title="Kirim pengingat tagihan via WhatsApp"
-                        className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer"
-                      >
-                        <Phone className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-
-                    {/* Edit & Delete Buttons */}
-                    <button
-                      onClick={() => {
-                        setEditingDebt(debt);
-                        setIsModalOpen(true);
-                      }}
-                      title="Edit data cicilan"
-                      className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (confirm(`Yakin ingin menghapus catatan "${debt.title}"?`)) {
-                          onDeleteDebt(debt.id);
-                        }
-                      }}
-                      title="Hapus catatan"
-                      className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {/* Notes & Memo Action Button */}
-                  <button
-                    onClick={() => handleOpenNotesModal(debt)}
-                    className="w-full py-1.5 px-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer"
-                    title="Lihat & Tambah Catatan Hutang / Piutang"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <NotebookPen className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Catatan & Janji Bayar</span>
-                      {debt.debtNotes && debt.debtNotes.length > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-extrabold">
-                          {debt.debtNotes.length}
-                        </span>
-                      )}
+              {/* SECTION 1: 🛍️ KREDIT & CICILAN BARANG (GADGET, ELEKTRONIK, PAYLATER) */}
+              <div className="rounded-3xl bg-slate-50/80 dark:bg-slate-900/80 border border-indigo-100/90 dark:border-indigo-900/40 p-4 sm:p-5 space-y-4 transition-colors">
+                {/* Section Header */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-indigo-100 dark:border-indigo-950/80">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                      <ShoppingBag className="w-5 h-5" />
                     </div>
-                    <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5">
-                      <Plus className="w-3 h-3" />
-                      <span>Catatan</span>
-                    </span>
-                  </button>
-
-                  {/* Excerpt of most recent note if exists */}
-                  {debt.debtNotes && debt.debtNotes.length > 0 && (
-                    <div
-                      onClick={() => handleOpenNotesModal(debt)}
-                      className="p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/40 text-[11px] cursor-pointer hover:border-amber-300 dark:hover:border-amber-700 transition-colors"
-                      title="Klik untuk membuka riwayat catatan lengkap"
-                    >
-                      <div className="flex items-center justify-between text-[10px] text-amber-800 dark:text-amber-300 font-bold mb-0.5">
-                        <span className="flex items-center gap-1">
-                          <StickyNote className="w-3 h-3 text-amber-600" />
-                          <span>Catatan Terakhir ({formatDateIndo(debt.debtNotes[0].date)}):</span>
-                        </span>
-                        <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.2 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
-                          {debt.debtNotes[0].category === 'janji_bayar' ? 'Janji Bayar' : debt.debtNotes[0].category === 'perjanjian' ? 'Perjanjian' : debt.debtNotes[0].category === 'konfirmasi' ? 'Konfirmasi' : debt.debtNotes[0].category === 'keringanan' ? 'Keringanan' : 'Catatan'}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-base text-slate-900 dark:text-white tracking-tight">
+                          Kredit & Cicilan Barang
+                        </h3>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                          {categorizedDebts.installments.length} Barang
                         </span>
                       </div>
-                      <p className="text-slate-700 dark:text-slate-300 line-clamp-2 italic font-medium">
-                        "{debt.debtNotes[0].content}"
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Sisa Kewajiban: <strong className="text-indigo-600 dark:text-indigo-400 font-mono">{formatCurrency(categorizedDebts.installmentSubtotalRemaining)}</strong>
+                        {categorizedDebts.installmentSubtotalMonthly > 0 && (
+                          <span> • Angsuran: <strong className="text-slate-700 dark:text-slate-300 font-mono">{formatCurrency(categorizedDebts.installmentSubtotalMonthly)}</strong> / bln</span>
+                        )}
                       </p>
                     </div>
-                  )}
+                  </div>
 
-                  {/* Payment History Accordion */}
-                  {debt.payments && debt.payments.length > 0 && (
-                    <div>
-                      <button
-                        onClick={() => toggleHistory(debt.id)}
-                        className="w-full text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-between py-1 px-1 cursor-pointer transition-colors"
-                      >
-                        <span className="flex items-center gap-1">
-                          <History className="w-3 h-3 text-slate-400 dark:text-slate-500" />
-                          Riwayat Pembayaran ({debt.payments.length} transaksi)
-                        </span>
-                        <span>{isHistoryExpanded ? 'Sembunyikan ▲' : 'Lihat Detail ▼'}</span>
-                      </button>
-
-                      {isHistoryExpanded && (
-                        <div className="mt-1.5 space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                          {debt.payments.map((pay) => (
-                            <div
-                              key={pay.id}
-                              className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-[11px] flex items-center justify-between"
-                            >
-                              <div>
-                                <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
-                                  {pay.monthNumber && (
-                                    <span className="px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[9px] font-extrabold">
-                                      Bulan {pay.monthNumber}
-                                    </span>
-                                  )}
-                                  <span>{formatCurrency(pay.amount)}</span>
-                                  {pay.lateFeePaid && pay.lateFeePaid > 0 && (
-                                    <span className="px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-[9px] font-extrabold flex items-center gap-0.5">
-                                      <AlertTriangle className="w-2.5 h-2.5" />
-                                      +Denda {formatCurrency(pay.lateFeePaid)} ({pay.daysLate} hr)
-                                    </span>
-                                  )}
-                                  {pay.waivedLateFee && pay.waivedLateFee > 0 && (
-                                    <span className="px-1.5 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[9px] font-extrabold">
-                                      Denda Dibebaskan
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{pay.notes || pay.date}</div>
-                              </div>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{pay.date}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <button
+                      onClick={() => {
+                        setEditingDebt(null);
+                        setModalDefaultType('installment');
+                        setIsModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Kredit Barang</span>
+                    </button>
+                    <button
+                      onClick={() => toggleSection('installment')}
+                      className="p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+                      title={collapsedSections['installment'] ? 'Buka Section' : 'Sembunyikan Section'}
+                    >
+                      {collapsedSections['installment'] ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
+
+                {/* Section Content */}
+                {!collapsedSections['installment'] && (
+                  categorizedDebts.installments.length === 0 ? (
+                    <div className="p-6 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-indigo-200 dark:border-indigo-900/60 text-xs text-slate-500 dark:text-slate-400">
+                      <p className="font-semibold">Belum ada catatan kredit barang.</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Catat cicilan HP, laptop, motor, atau barang elektronik Anda agar teratur.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {categorizedDebts.installments.map((debt) => (
+                        <DebtCardItem
+                          key={debt.id}
+                          debt={debt}
+                          isHistoryExpanded={!!expandedHistories[debt.id]}
+                          onToggleHistory={() => toggleHistory(debt.id)}
+                          onOpenPayment={handleOpenPaymentModal}
+                          onOpenNotes={handleOpenNotesModal}
+                          onOpenWhatsApp={handleOpenWhatsAppReminder}
+                          onEdit={(d) => {
+                            setEditingDebt(d);
+                            setIsModalOpen(true);
+                          }}
+                          onDelete={onDeleteDebt}
+                          getDueStatusBadge={getDueStatusBadge}
+                        />
+                      ))}
+                    </div>
+                  )
+                )}
               </div>
-            );
-          })}
-        </div>
+
+              {/* SECTION 2: 💸 HUTANG TUNAI & PINJAMAN (KEWAJIBAN SAYA) */}
+              <div className="rounded-3xl bg-slate-50/80 dark:bg-slate-900/80 border border-rose-100/90 dark:border-rose-900/40 p-4 sm:p-5 space-y-4 transition-colors">
+                {/* Section Header */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-rose-100 dark:border-rose-950/80">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                      <ArrowUpRight className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-base text-slate-900 dark:text-white tracking-tight">
+                          Hutang Tunai & Pinjaman
+                        </h3>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
+                          {categorizedDebts.payables.length} Hutang
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Total Sisa Hutang: <strong className="text-rose-600 dark:text-rose-400 font-mono">{formatCurrency(categorizedDebts.payableSubtotalRemaining)}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <button
+                      onClick={() => {
+                        setEditingDebt(null);
+                        setModalDefaultType('payable');
+                        setIsModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Catat Hutang</span>
+                    </button>
+                    <button
+                      onClick={() => toggleSection('payable')}
+                      className="p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+                      title={collapsedSections['payable'] ? 'Buka Section' : 'Sembunyikan Section'}
+                    >
+                      {collapsedSections['payable'] ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section Content */}
+                {!collapsedSections['payable'] && (
+                  categorizedDebts.payables.length === 0 ? (
+                    <div className="p-6 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-rose-200 dark:border-rose-900/60 text-xs text-slate-500 dark:text-slate-400">
+                      <p className="font-semibold">Tidak ada catatan hutang tunai aktif.</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Kondisi keuangan bebas pinjaman tunai pribadi / perbankan.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {categorizedDebts.payables.map((debt) => (
+                        <DebtCardItem
+                          key={debt.id}
+                          debt={debt}
+                          isHistoryExpanded={!!expandedHistories[debt.id]}
+                          onToggleHistory={() => toggleHistory(debt.id)}
+                          onOpenPayment={handleOpenPaymentModal}
+                          onOpenNotes={handleOpenNotesModal}
+                          onOpenWhatsApp={handleOpenWhatsAppReminder}
+                          onEdit={(d) => {
+                            setEditingDebt(d);
+                            setIsModalOpen(true);
+                          }}
+                          onDelete={onDeleteDebt}
+                          getDueStatusBadge={getDueStatusBadge}
+                        />
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* SECTION 3: 📥 PIUTANG SAYA (UANG YANG DIPINJAM ORANG LAIN) */}
+              <div className="rounded-3xl bg-slate-50/80 dark:bg-slate-900/80 border border-emerald-100/90 dark:border-emerald-900/40 p-4 sm:p-5 space-y-4 transition-colors">
+                {/* Section Header */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-emerald-100 dark:border-emerald-950/80">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                      <ArrowDownLeft className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-base text-slate-900 dark:text-white tracking-tight">
+                          Piutang Saya (Tagihan Masuk)
+                        </h3>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                          {categorizedDebts.receivables.length} Piutang
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Total Belum Tertagih: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{formatCurrency(categorizedDebts.receivableSubtotalRemaining)}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                    <button
+                      onClick={() => {
+                        setEditingDebt(null);
+                        setModalDefaultType('receivable');
+                        setIsModalOpen(true);
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Catat Piutang</span>
+                    </button>
+                    <button
+                      onClick={() => toggleSection('receivable')}
+                      className="p-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+                      title={collapsedSections['receivable'] ? 'Buka Section' : 'Sembunyikan Section'}
+                    >
+                      {collapsedSections['receivable'] ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section Content */}
+                {!collapsedSections['receivable'] && (
+                  categorizedDebts.receivables.length === 0 ? (
+                    <div className="p-6 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-emerald-200 dark:border-emerald-900/60 text-xs text-slate-500 dark:text-slate-400">
+                      <p className="font-semibold">Tidak ada catatan piutang aktif.</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Semua pinjaman yang diberikan ke rekan/usaha sudah lunas atau belum ada.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {categorizedDebts.receivables.map((debt) => (
+                        <DebtCardItem
+                          key={debt.id}
+                          debt={debt}
+                          isHistoryExpanded={!!expandedHistories[debt.id]}
+                          onToggleHistory={() => toggleHistory(debt.id)}
+                          onOpenPayment={handleOpenPaymentModal}
+                          onOpenNotes={handleOpenNotesModal}
+                          onOpenWhatsApp={handleOpenWhatsAppReminder}
+                          onEdit={(d) => {
+                            setEditingDebt(d);
+                            setIsModalOpen(true);
+                          }}
+                          onDelete={onDeleteDebt}
+                          getDueStatusBadge={getDueStatusBadge}
+                        />
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          ) : (
+            /* =========================================================================
+               TAMPILAN 3: GRID KARTU BERSIH (FILTERED OR DIRECT CARDS VIEW)
+               ========================================================================= */
+            <div className="space-y-4">
+              {/* Category Filter Title Header if specific tab selected */}
+              {activeTab !== 'all' && (
+                <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/70 dark:border-slate-700/80 flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <div className="flex items-center gap-2">
+                    {activeTab === 'installment' ? (
+                      <ShoppingBag className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    ) : activeTab === 'payable' ? (
+                      <ArrowUpRight className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                    ) : activeTab === 'receivable' ? (
+                      <ArrowDownLeft className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                    )}
+                    <span>
+                      {activeTab === 'installment'
+                        ? 'Daftar Kredit & Cicilan Barang'
+                        : activeTab === 'payable'
+                        ? 'Daftar Hutang Tunai'
+                        : activeTab === 'receivable'
+                        ? 'Daftar Piutang Saya'
+                        : 'Daftar Tagihan Jatuh Tempo / Telat'} ({filteredDebts.length})
+                    </span>
+                  </div>
+                  <span className="text-slate-500 dark:text-slate-400 font-normal">
+                    Total Sisa:{' '}
+                    <strong className="text-slate-900 dark:text-white font-mono font-bold">
+                      {formatRupiah(filteredDebts.reduce((sum, d) => sum + d.remainingAmount, 0))}
+                    </strong>
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredDebts.map((debt) => (
+                  <DebtCardItem
+                    key={debt.id}
+                    debt={debt}
+                    isHistoryExpanded={!!expandedHistories[debt.id]}
+                    onToggleHistory={() => toggleHistory(debt.id)}
+                    onOpenPayment={handleOpenPaymentModal}
+                    onOpenNotes={handleOpenNotesModal}
+                    onOpenWhatsApp={handleOpenWhatsAppReminder}
+                    onEdit={(d) => {
+                      setEditingDebt(d);
+                      setIsModalOpen(true);
+                    }}
+                    onDelete={onDeleteDebt}
+                    getDueStatusBadge={getDueStatusBadge}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
-    </>
-  )}
 
       {/* MODAL: Payment / Angsuran Confirmation */}
       {isPaymentModalOpen && activePaymentDebt && (() => {
@@ -1757,6 +2413,30 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
         onClose={() => setIsCalculatorOpen(false)}
         onSaveInstallment={onSaveDebt}
         accounts={accounts}
+      />
+
+      {/* Debt Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!debtToDelete}
+        title="Hapus Catatan Ini?"
+        message={
+          debtToDelete
+            ? `Apakah Anda yakin ingin menghapus catatan "${debtToDelete.title}" senilai ${formatRupiah(
+                debtToDelete.totalAmount
+              )}? Data catatan dan histori pembayarannya akan dihapus dari Firestore.`
+            : ''
+        }
+        confirmText="Ya, Hapus Catatan"
+        cancelText="Batal"
+        variant="danger"
+        icon="trash"
+        onConfirm={() => {
+          if (debtToDelete) {
+            onDeleteDebt(debtToDelete.id);
+            setDebtToDelete(null);
+          }
+        }}
+        onClose={() => setDebtToDelete(null)}
       />
     </div>
   );
@@ -2928,6 +3608,7 @@ export const DebtNotesModal: React.FC<DebtNotesModalProps> = ({
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [noteToDelete, setNoteToDelete] = useState<DebtNote | null>(null);
 
   if (!isOpen || !debt) return null;
 
@@ -3122,11 +3803,7 @@ export const DebtNotesModal: React.FC<DebtNotesModalProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (confirm('Hapus catatan ini?')) {
-                              onDeleteNote(debt.id, note.id);
-                            }
-                          }}
+                          onClick={() => setNoteToDelete(note)}
                           title="Hapus catatan"
                           className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
                         >
@@ -3155,6 +3832,24 @@ export const DebtNotesModal: React.FC<DebtNotesModalProps> = ({
             Tutup
           </button>
         </div>
+
+        {/* Note Delete Confirm Modal */}
+        <ConfirmModal
+          isOpen={!!noteToDelete}
+          title="Hapus Memo Catatan?"
+          message="Apakah Anda yakin ingin menghapus memo catatan ini dari riwayat?"
+          confirmText="Ya, Hapus"
+          cancelText="Batal"
+          variant="danger"
+          icon="trash"
+          onConfirm={() => {
+            if (noteToDelete) {
+              onDeleteNote(debt.id, noteToDelete.id);
+              setNoteToDelete(null);
+            }
+          }}
+          onClose={() => setNoteToDelete(null)}
+        />
       </div>
     </div>
   );
