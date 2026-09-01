@@ -105,6 +105,108 @@
         "timestamp": { "type": "string" }
       },
       "required": ["id", "sender", "text", "timestamp"]
+    },
+    "CompanySalaryProfile": {
+      "title": "CompanySalaryProfile",
+      "description": "Company profile with salary components, daily rates, and cut-off configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "badgeColor": { "type": "string" },
+        "employmentType": { "type": "string" },
+        "baseSalary": { "type": "number" },
+        "dailyRate": { "type": "number" },
+        "standardWorkingDays": { "type": "number" },
+        "isProratedBaseSalary": { "type": "boolean" },
+        "isDailyTransport": { "type": "boolean" },
+        "dailyTransportRate": { "type": "number" },
+        "fixedAllowance": { "type": "number" },
+        "transportAllowance": { "type": "number" },
+        "otherAllowance": { "type": "number" },
+        "overtimeHours": { "type": "number" },
+        "overtimeRatePerHour": { "type": "number" },
+        "bonusOrThr": { "type": "number" },
+        "includeBpjsKesehatan": { "type": "boolean" },
+        "includeBpjsKetenagakerjaan": { "type": "boolean" },
+        "calculatePph21": { "type": "boolean" },
+        "taxMethod": { "type": "string" },
+        "ptkpStatus": { "type": "string" },
+        "hasNpwp": { "type": "boolean" },
+        "loanOrCashAdvance": { "type": "number" },
+        "absenceDeduction": { "type": "number" },
+        "cooperativeFee": { "type": "number" },
+        "otherDeduction": { "type": "number" },
+        "cutOffConfig": { "type": "object" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "companyName", "employmentType", "baseSalary", "dailyRate"]
+    },
+    "WorkScheduleDay": {
+      "title": "WorkScheduleDay",
+      "description": "Daily calendar work attendance and overtime record",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "dayOfWeek": { "type": "number" },
+        "dayNumber": { "type": "number" },
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "assignments": { "type": "object" },
+        "isHoliday": { "type": "boolean" },
+        "holidayName": { "type": "string" }
+      },
+      "required": ["date", "assignments"]
+    },
+    "SalarySettings": {
+      "title": "SalarySettings",
+      "description": "General settings for salary calculator",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "employeeName"]
+    }
+  },
+  "firestore": {
+    "/accounts/{accountId}": {
+      "schema": "Account",
+      "description": "Bank and digital wallet accounts"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Income, expense, and transfer records"
+    },
+    "/budgets/{budgetId}": {
+      "schema": "Budget",
+      "description": "Monthly spending category budgets"
+    },
+    "/goals/{goalId}": {
+      "schema": "FinancialGoal",
+      "description": "Savings and financial goals"
+    },
+    "/debts/{debtId}": {
+      "schema": "DebtRecord",
+      "description": "Hutang and Piutang tracking"
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Financial AI chat assistant messages"
+    },
+    "/salary_companies/{companyId}": {
+      "schema": "CompanySalaryProfile",
+      "description": "Company payroll profiles and salary configurations"
+    },
+    "/work_schedules/{date}": {
+      "schema": "WorkScheduleDay",
+      "description": "Calendar daily attendance and shift allocations"
+    },
+    "/salary_settings/{settingId}": {
+      "schema": "SalarySettings",
+      "description": "Global salary calculator settings"
     }
   }
 }

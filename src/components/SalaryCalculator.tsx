@@ -22,6 +22,17 @@ import { formatRupiah } from '../utils/formatters';
 import { WorkScheduleCalendar } from './WorkScheduleCalendar';
 import { CompanySalaryModal } from './CompanySalaryModal';
 import {
+  subscribeSalaryCompanies,
+  subscribeWorkSchedules,
+  subscribeSalarySettings,
+  saveSalaryCompanyToFirestore,
+  saveAllSalaryCompaniesToFirestore,
+  deleteSalaryCompanyFromFirestore,
+  saveWorkScheduleDayToFirestore,
+  saveBatchWorkSchedulesToFirestore,
+  saveSalarySettingsToFirestore,
+} from '../services/firebaseDb';
+import {
   Building,
   CreditCard,
   Receipt,
@@ -50,6 +61,8 @@ import {
   ChevronRight,
   Wallet,
   Calculator,
+  Cloud,
+  Check,
 } from 'lucide-react';
 
 interface SalaryCalculatorProps {
@@ -69,6 +82,7 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   const [employeeName, setEmployeeName] = useState('Yudit Hermawan');
   const [periodMonth, setPeriodMonth] = useState<number>(new Date().getMonth() + 1);
   const [periodYear, setPeriodYear] = useState<number>(new Date().getFullYear());
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(true);
 
   // Dynamic Companies List State with migration fallback
   const [companies, setCompanies] = useState<CompanySalaryProfile[]>(() => {
@@ -101,6 +115,42 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     } catch (e) {}
     return {};
   });
+
+  // Real-time Firebase Subscriptions across all devices
+  useEffect(() => {
+    const unsubCompanies = subscribeSalaryCompanies((cloudCompanies) => {
+      if (cloudCompanies && cloudCompanies.length > 0) {
+        setCompanies(cloudCompanies);
+        try {
+          localStorage.setItem(STORAGE_KEY_COMPANIES, JSON.stringify(cloudCompanies));
+        } catch (e) {}
+      } else {
+        // If empty in cloud, push current default/local companies to Firestore
+        saveAllSalaryCompaniesToFirestore(companies);
+      }
+    });
+
+    const unsubSchedules = subscribeWorkSchedules((cloudSchedules) => {
+      if (cloudSchedules && Object.keys(cloudSchedules).length > 0) {
+        setSchedules(cloudSchedules);
+        try {
+          localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify(cloudSchedules));
+        } catch (e) {}
+      }
+    });
+
+    const unsubSettings = subscribeSalarySettings((settings) => {
+      if (settings && settings.employeeName) {
+        setEmployeeName(settings.employeeName);
+      }
+    });
+
+    return () => {
+      unsubCompanies();
+      unsubSchedules();
+      unsubSettings();
+    };
+  }, []);
 
   // Save to LocalStorage whenever state changes
   useEffect(() => {
@@ -261,7 +311,7 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSaveCompany = (savedCompany: CompanySalaryProfile) => {
+  const handleSaveCompany = async (savedCompany: CompanySalaryProfile) => {
     setSavedIncomeStatus({});
     setCompanies((prev) => {
       const exists = prev.some((c) => c.id === savedCompany.id);
@@ -270,6 +320,11 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
       }
       return [...prev, savedCompany];
     });
+    try {
+      await saveSalaryCompanyToFirestore(savedCompany);
+    } catch (err) {
+      console.error('Failed to save company to Firestore:', err);
+    }
   };
 
   const requestDeleteCompany = (company: CompanySalaryProfile) => {
@@ -284,7 +339,7 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     setCompanyToDelete(company);
   };
 
-  const handleConfirmDeleteCompany = (companyId: string) => {
+  const handleConfirmDeleteCompany = async (companyId: string) => {
     const targetComp = companies.find((c) => c.id === companyId);
     const compName = targetComp?.companyName || 'Perusahaan';
 
@@ -297,21 +352,35 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
       return updated;
     });
 
+    try {
+      await deleteSalaryCompanyFromFirestore(companyId);
+    } catch (err) {
+      console.error('Failed to delete company from Firestore:', err);
+    }
+
     // Clean up schedule assignments for deleted company
     setSchedules((prev) => {
       const updated: Record<string, WorkScheduleDay> = {};
+      const batchSchedulesToUpdate: Record<string, WorkScheduleDay> = {};
       Object.entries(prev).forEach(([dateStr, dayData]) => {
         if (dayData.assignments && dayData.assignments[companyId]) {
           const newAssignments = { ...dayData.assignments };
           delete newAssignments[companyId];
-          updated[dateStr] = {
+          const cleanedDay = {
             ...dayData,
             assignments: newAssignments,
           };
+          updated[dateStr] = cleanedDay;
+          batchSchedulesToUpdate[dateStr] = cleanedDay;
         } else {
           updated[dateStr] = dayData;
         }
       });
+      if (Object.keys(batchSchedulesToUpdate).length > 0) {
+        saveBatchWorkSchedulesToFirestore(batchSchedulesToUpdate).catch((e) =>
+          console.error('Failed to cleanup schedules in Firestore:', e)
+        );
+      }
       try {
         localStorage.setItem(STORAGE_KEY_SCHEDULES, JSON.stringify(updated));
       } catch (e) {}
@@ -337,7 +406,7 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
     handleConfirmDeleteCompany(companyId);
   };
 
-  const handleDuplicateCompany = (company: CompanySalaryProfile) => {
+  const handleDuplicateCompany = async (company: CompanySalaryProfile) => {
     const duplicated: CompanySalaryProfile = {
       ...company,
       id: 'comp_' + Date.now(),
@@ -345,29 +414,67 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
       notes: `Duplikat dari ${company.companyName}`,
     };
     setCompanies((prev) => [...prev, duplicated]);
+    try {
+      await saveSalaryCompanyToFirestore(duplicated);
+    } catch (err) {
+      console.error('Failed to duplicate company in Firestore:', err);
+    }
   };
 
-  const handleUpdateCompanyProfile = (companyId: string, updated: Partial<CompanySalaryProfile>) => {
+  const handleUpdateCompanyProfile = async (companyId: string, updated: Partial<CompanySalaryProfile>) => {
     setSavedIncomeStatus({});
+    let targetCompany: CompanySalaryProfile | undefined;
     setCompanies((prev) =>
-      prev.map((c) => (c.id === companyId ? { ...c, ...updated } : c))
+      prev.map((c) => {
+        if (c.id === companyId) {
+          targetCompany = { ...c, ...updated };
+          return targetCompany;
+        }
+        return c;
+      })
     );
+    if (targetCompany) {
+      try {
+        await saveSalaryCompanyToFirestore(targetCompany);
+      } catch (err) {
+        console.error('Failed to update company in Firestore:', err);
+      }
+    }
   };
 
-  const handleUpdateScheduleDay = (dateStr: string, dayData: WorkScheduleDay) => {
+  const handleUpdateScheduleDay = async (dateStr: string, dayData: WorkScheduleDay) => {
     setSavedIncomeStatus({});
     setSchedules((prev) => ({
       ...prev,
       [dateStr]: dayData,
     }));
+    try {
+      await saveWorkScheduleDayToFirestore(dayData);
+    } catch (err) {
+      console.error('Failed to save schedule day in Firestore:', err);
+    }
   };
 
-  const handleBatchUpdateSchedules = (updates: Record<string, WorkScheduleDay>) => {
+  const handleBatchUpdateSchedules = async (updates: Record<string, WorkScheduleDay>) => {
     setSavedIncomeStatus({});
     setSchedules((prev) => ({
       ...prev,
       ...updates,
     }));
+    try {
+      await saveBatchWorkSchedulesToFirestore(updates);
+    } catch (err) {
+      console.error('Failed to batch save schedules in Firestore:', err);
+    }
+  };
+
+  const handleUpdateEmployeeName = async (newName: string) => {
+    setEmployeeName(newName);
+    try {
+      await saveSalarySettingsToFirestore({ employeeName: newName });
+    } catch (err) {
+      console.error('Failed to update employee name in Firestore:', err);
+    }
   };
 
   // Deposit Handlers
@@ -418,10 +525,14 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
         <div className="relative z-10 space-y-5">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1.5">
                   <Building2 className="w-3 h-3 text-indigo-400" />
                   Sistem Gaji Pokok + Daily Rate Multi-Perusahaan
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <Cloud className="w-3 h-3 text-emerald-400 animate-pulse" />
+                  Tersinkronisasi Cloud Firebase
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
                   {periodLabel}
@@ -431,7 +542,7 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
                 Kalkulator Gaji & Jadwal Kerja Multi-Perusahaan
               </h1>
               <p className="text-xs text-slate-300 max-w-2xl">
-                Penghitungan komprehensif <strong>Gaji Pokok + Daily Rate (Upah Harian)</strong> sesuai presensi kalender, jam lembur, serta tanggal cut-off tutup buku masing-masing perusahaan.
+                Penghitungan komprehensif <strong>Gaji Pokok + Daily Rate (Upah Harian)</strong> tersimpan otomatis di Firebase Firestore, sinkron real-time di semua perangkat.
               </p>
             </div>
 
@@ -1244,8 +1355,15 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
             {/* Employee Metadata Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs">
               <div>
-                <span className="text-slate-500 block">Nama Karyawan:</span>
-                <span className="font-bold text-slate-900 dark:text-white text-sm">{employeeName}</span>
+                <span className="text-slate-500 block mb-1">Nama Karyawan:</span>
+                <input
+                  type="text"
+                  value={employeeName}
+                  onChange={(e) => handleUpdateEmployeeName(e.target.value)}
+                  className="font-bold text-slate-900 dark:text-white text-sm bg-transparent border-b border-dashed border-slate-400 dark:border-slate-600 focus:outline-hidden focus:border-indigo-500 pb-0.5 w-full max-w-[200px]"
+                  title="Klik untuk mengedit nama karyawan"
+                  placeholder="Nama Karyawan"
+                />
               </div>
               <div>
                 <span className="text-slate-500 block">Total Kehadiran Kerja:</span>

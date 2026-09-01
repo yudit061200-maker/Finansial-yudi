@@ -18,12 +18,19 @@ import {
   DebtRecord,
 } from '../types/finance';
 import {
+  CompanySalaryProfile,
+  WorkScheduleDay,
+} from '../types/salary';
+import {
   INITIAL_ACCOUNTS,
   INITIAL_TRANSACTIONS,
   INITIAL_BUDGETS,
   INITIAL_GOALS,
   INITIAL_DEBTS,
 } from '../data/initialData';
+import {
+  DEFAULT_COMPANIES,
+} from '../utils/scheduleHelper';
 
 // Firestore collection names
 const COLLECTIONS = {
@@ -33,8 +40,30 @@ const COLLECTIONS = {
   GOALS: 'goals',
   DEBTS: 'debts',
   CHAT_MESSAGES: 'chat_messages',
+  SALARY_COMPANIES: 'salary_companies',
+  WORK_SCHEDULES: 'work_schedules',
+  SALARY_SETTINGS: 'salary_settings',
   SYSTEM_META: 'system_meta',
 };
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    operationType,
+    path,
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 const INIT_DOC_ID = 'init_status';
 const LOCAL_SEEDED_KEY = 'arthasmart_seeded_v4';
@@ -95,6 +124,20 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
         });
         await batch.commit();
       }
+
+      // Ensure salary companies collection has initial profiles if empty
+      const salarySnap = await getDocs(collection(db, COLLECTIONS.SALARY_COMPANIES));
+      if (salarySnap.empty && DEFAULT_COMPANIES.length > 0) {
+        const batch = writeBatch(db);
+        DEFAULT_COMPANIES.forEach((comp) => {
+          const ref = doc(db, COLLECTIONS.SALARY_COMPANIES, comp.id);
+          batch.set(ref, cleanForFirestore(comp));
+        });
+        const settingRef = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
+        batch.set(settingRef, { id: 'general', employeeName: 'Yudit Hermawan', updatedAt: new Date().toISOString() });
+        await batch.commit();
+      }
+
       localStorage.setItem(LOCAL_SEEDED_KEY, 'true');
       return;
     }
@@ -114,6 +157,20 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
         });
         await batch.commit();
       }
+
+      // Ensure salary companies exist
+      const salarySnap = await getDocs(collection(db, COLLECTIONS.SALARY_COMPANIES));
+      if (salarySnap.empty && DEFAULT_COMPANIES.length > 0) {
+        const batch = writeBatch(db);
+        DEFAULT_COMPANIES.forEach((comp) => {
+          const ref = doc(db, COLLECTIONS.SALARY_COMPANIES, comp.id);
+          batch.set(ref, cleanForFirestore(comp));
+        });
+        const settingRef = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
+        batch.set(settingRef, { id: 'general', employeeName: 'Yudit Hermawan', updatedAt: new Date().toISOString() });
+        await batch.commit();
+      }
+
       await setDoc(metaRef, { isInitialized: true, updatedAt: new Date().toISOString() });
       localStorage.setItem(LOCAL_SEEDED_KEY, 'true');
       return;
@@ -146,6 +203,14 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
       const ref = doc(db, COLLECTIONS.DEBTS, d.id);
       batch.set(ref, d);
     });
+
+    DEFAULT_COMPANIES.forEach((comp) => {
+      const ref = doc(db, COLLECTIONS.SALARY_COMPANIES, comp.id);
+      batch.set(ref, cleanForFirestore(comp));
+    });
+
+    const settingRef = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
+    batch.set(settingRef, { id: 'general', employeeName: 'Yudit Hermawan', updatedAt: new Date().toISOString() });
 
     const welcomeMsg: ChatMessage = {
       id: 'msg-welcome',
@@ -443,6 +508,142 @@ export async function clearChatHistoryInFirestore(): Promise<void> {
   await batch.commit();
 }
 
+// Subscriptions for Salary Calculator & Work Calendar
+export function subscribeSalaryCompanies(onUpdate: (companies: CompanySalaryProfile[]) => void) {
+  const colRef = collection(db, COLLECTIONS.SALARY_COMPANIES);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const items = snapshot.docs.map((d) => d.data() as CompanySalaryProfile);
+      onUpdate(items);
+    },
+    (error) => {
+      console.error('Firestore salary companies subscription error:', error);
+      handleFirestoreError(error, OperationType.GET, COLLECTIONS.SALARY_COMPANIES);
+    }
+  );
+}
+
+export function subscribeWorkSchedules(onUpdate: (schedules: Record<string, WorkScheduleDay>) => void) {
+  const colRef = collection(db, COLLECTIONS.WORK_SCHEDULES);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const scheduleMap: Record<string, WorkScheduleDay> = {};
+      snapshot.docs.forEach((d) => {
+        const data = d.data() as WorkScheduleDay;
+        if (data.date) {
+          scheduleMap[data.date] = data;
+        } else {
+          scheduleMap[d.id] = { ...data, date: d.id };
+        }
+      });
+      onUpdate(scheduleMap);
+    },
+    (error) => {
+      console.error('Firestore work schedules subscription error:', error);
+      handleFirestoreError(error, OperationType.GET, COLLECTIONS.WORK_SCHEDULES);
+    }
+  );
+}
+
+export function subscribeSalarySettings(onUpdate: (settings: { employeeName: string }) => void) {
+  const docRef = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        onUpdate({
+          employeeName: data.employeeName || 'Yudit Hermawan',
+        });
+      }
+    },
+    (error) => {
+      console.error('Firestore salary settings subscription error:', error);
+    }
+  );
+}
+
+// Salary Company Mutations
+export async function saveSalaryCompanyToFirestore(company: CompanySalaryProfile): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTIONS.SALARY_COMPANIES, company.id);
+    await setDoc(ref, cleanForFirestore(company), { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SALARY_COMPANIES}/${company.id}`);
+  }
+}
+
+export async function saveAllSalaryCompaniesToFirestore(companies: CompanySalaryProfile[]): Promise<void> {
+  try {
+    const existingSnap = await getDocs(collection(db, COLLECTIONS.SALARY_COMPANIES));
+    const newIds = new Set(companies.map((c) => c.id));
+    const batch = writeBatch(db);
+
+    existingSnap.docs.forEach((d) => {
+      if (!newIds.has(d.id)) {
+        batch.delete(d.ref);
+      }
+    });
+
+    companies.forEach((c) => {
+      const ref = doc(db, COLLECTIONS.SALARY_COMPANIES, c.id);
+      batch.set(ref, cleanForFirestore(c), { merge: true });
+    });
+
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, COLLECTIONS.SALARY_COMPANIES);
+  }
+}
+
+export async function deleteSalaryCompanyFromFirestore(companyId: string): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTIONS.SALARY_COMPANIES, companyId);
+    await deleteDoc(ref);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${COLLECTIONS.SALARY_COMPANIES}/${companyId}`);
+  }
+}
+
+// Work Schedule Mutations
+export async function saveWorkScheduleDayToFirestore(schedule: WorkScheduleDay): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTIONS.WORK_SCHEDULES, schedule.date);
+    await setDoc(ref, cleanForFirestore(schedule), { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.WORK_SCHEDULES}/${schedule.date}`);
+  }
+}
+
+export async function saveBatchWorkSchedulesToFirestore(schedules: Record<string, WorkScheduleDay>): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    Object.entries(schedules).forEach(([dateStr, dayData]) => {
+      const ref = doc(db, COLLECTIONS.WORK_SCHEDULES, dateStr);
+      batch.set(ref, cleanForFirestore({ ...dayData, date: dateStr }), { merge: true });
+    });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, COLLECTIONS.WORK_SCHEDULES);
+  }
+}
+
+// Salary Settings Mutations
+export async function saveSalarySettingsToFirestore(settings: { employeeName: string }): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
+    await setDoc(ref, {
+      ...settings,
+      id: 'general',
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SALARY_SETTINGS}/general`);
+  }
+}
+
 // Reset everything in Firestore to standard initial data
 export async function resetAllFirestoreData(): Promise<void> {
   const collectionsToClear = [
@@ -452,6 +653,9 @@ export async function resetAllFirestoreData(): Promise<void> {
     COLLECTIONS.GOALS,
     COLLECTIONS.DEBTS,
     COLLECTIONS.CHAT_MESSAGES,
+    COLLECTIONS.SALARY_COMPANIES,
+    COLLECTIONS.WORK_SCHEDULES,
+    COLLECTIONS.SALARY_SETTINGS,
     COLLECTIONS.SYSTEM_META,
   ];
 
