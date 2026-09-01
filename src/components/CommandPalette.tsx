@@ -19,11 +19,15 @@ import {
   X,
   Sparkles,
   Palette,
+  ShieldCheck,
+  ShieldAlert,
+  User as UserIcon,
 } from 'lucide-react';
 import { Account, Transaction, DebtRecord, FinancialGoal, Budget } from '../types/finance';
 import { NavTab } from './Header';
 import { formatRupiah, formatDateIndo } from '../utils/formatters';
 import { useTheme, ThemePalette } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -58,6 +62,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const { theme, toggleTheme, palette, setPalette, paletteConfig, setIsThemeModalOpen } = useTheme();
+  const { currentUser, isEmailVerified, isAnonymous, openAuthModal } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when opened
@@ -114,6 +119,32 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         run: () => {
           onClose();
           onOpenQuickScan();
+        },
+      },
+      {
+        id: 'auth-action',
+        title: currentUser && !isAnonymous ? 'Kelola Akun & Profil' : 'Masuk / Daftar Akun',
+        subtitle: currentUser && !isAnonymous
+          ? `${currentUser.email} • ${isEmailVerified ? 'Email Terverifikasi ✓' : 'Belum Verifikasi ⚠'}`
+          : 'Masuk dengan Email & Password Terverifikasi atau Google',
+        icon: isEmailVerified ? ShieldCheck : ShieldAlert,
+        category: 'Keamanan & Akun',
+        run: () => {
+          onClose();
+          openAuthModal(currentUser && !isAnonymous ? (isEmailVerified ? 'profile' : 'verify') : 'login');
+        },
+      },
+      {
+        id: 'verify-email-action',
+        title: 'Status & Link Verifikasi Email',
+        subtitle: isEmailVerified
+          ? 'Akun Anda sudah terverifikasi dengan aman'
+          : 'Kirim ulang link verifikasi atau cek status email',
+        icon: ShieldCheck,
+        category: 'Keamanan & Akun',
+        run: () => {
+          onClose();
+          openAuthModal('verify');
         },
       },
       {

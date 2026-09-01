@@ -48,6 +48,8 @@ import { AndroidBottomNav } from './components/AndroidBottomNav';
 import { AndroidInstallModal } from './components/AndroidInstallModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ThemeSelectorModal } from './components/ThemeSelectorModal';
+import { AuthModal } from './components/AuthModal';
+import { EmailVerificationBanner } from './components/EmailVerificationBanner';
 import { useTheme } from './context/ThemeContext';
 import { getCashSummary } from './utils/cashflow';
 import { isDebtPaid, formatRupiah } from './utils/formatters';
@@ -586,6 +588,9 @@ export default function App() {
 
       {/* Main Workspace Column */}
       <div className="flex-1 flex flex-col min-w-0 pb-20 lg:pb-0">
+        {/* Email Verification Required Banner */}
+        <EmailVerificationBanner />
+
         {/* Cockpit Topbar */}
         <Header
           activeTab={activeTab}
@@ -856,6 +861,9 @@ export default function App() {
         isOpen={isThemeModalOpen}
         onClose={() => setIsThemeModalOpen(false)}
       />
+
+      {/* User Authentication & Verified Email Modal */}
+      <AuthModal />
 
       {/* Global Toast Notification */}
       {toastMessage && (

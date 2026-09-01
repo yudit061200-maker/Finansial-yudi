@@ -24,9 +24,13 @@ import {
   TrendingUp,
   X,
   Palette,
+  ShieldAlert,
+  User as UserIcon,
+  LogOut,
 } from 'lucide-react';
 import { NavTab } from './Header';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { formatRupiah, formatRupiahShort } from '../utils/formatters';
 
 interface SidebarProps {
@@ -65,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { theme, toggleTheme, paletteConfig, setIsThemeModalOpen } = useTheme();
+  const { currentUser, isEmailVerified, isAnonymous, openAuthModal, logout } = useAuth();
 
   const formatMoney = (amount: number) => {
     if (isPrivacyMode) return 'Rp ••••••••';
@@ -297,6 +302,96 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
         ))}
+      </div>
+
+      {/* User Account & Email Verification Status Widget */}
+      <div className="px-3 py-2 border-t border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/40">
+        {currentUser && !isAnonymous ? (
+          <div className="p-2.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 space-y-2 shadow-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={() => {
+                  if (isOpenMobile && onCloseMobile) onCloseMobile();
+                  openAuthModal(isEmailVerified ? 'profile' : 'verify');
+                }}
+                className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer group"
+                title="Kelola Akun & Profil"
+              >
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                  {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : currentUser.email ? currentUser.email[0].toUpperCase() : 'U'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    {currentUser.displayName || currentUser.email?.split('@')[0]}
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">
+                    {currentUser.email}
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (isOpenMobile && onCloseMobile) onCloseMobile();
+                  await logout();
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer shrink-0"
+                title="Keluar (Logout)"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Email Verification Status Pill */}
+            <button
+              onClick={() => {
+                if (isOpenMobile && onCloseMobile) onCloseMobile();
+                openAuthModal('verify');
+              }}
+              className={`w-full py-1 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-between cursor-pointer transition-all border ${
+                isEmailVerified
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80 hover:bg-emerald-100'
+                  : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80 hover:bg-amber-100'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                {isEmailVerified ? (
+                  <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400 animate-pulse" />
+                )}
+                <span>{isEmailVerified ? 'Email Terverifikasi' : 'Verifikasi Email'}</span>
+              </div>
+              <span className="text-[9px] font-semibold opacity-80">
+                {isEmailVerified ? 'Aman' : 'Kirim Ulang'}
+              </span>
+            </button>
+          </div>
+        ) : (
+          <button
+            id="btn-sidebar-login"
+            onClick={() => {
+              if (isOpenMobile && onCloseMobile) onCloseMobile();
+              openAuthModal('login');
+            }}
+            className="w-full p-2.5 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/80 flex items-center justify-between text-left transition-all cursor-pointer group"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-xs group-hover:scale-105 transition-transform">
+                <UserIcon className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-extrabold text-indigo-900 dark:text-indigo-200">
+                  Masuk / Daftar Akun
+                </div>
+                <div className="text-[10px] text-indigo-700/80 dark:text-indigo-300/80 font-medium">
+                  Email & Password Terverifikasi
+                </div>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-indigo-500 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        )}
       </div>
 
       {/* 5. Footer: Android App, Theme Toggle, Real-time Sync & Reset */}
