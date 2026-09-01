@@ -49,7 +49,7 @@ import { AndroidInstallModal } from './components/AndroidInstallModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ThemeSelectorModal } from './components/ThemeSelectorModal';
 import { AuthModal } from './components/AuthModal';
-import { LoginGate } from './components/LoginGate';
+import { UserProfileModal } from './components/UserProfileModal';
 import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
 import { getCashSummary } from './utils/cashflow';
@@ -57,9 +57,16 @@ import { isDebtPaid, formatRupiah } from './utils/formatters';
 import { RotateCcw, Check, CloudCheck, Loader2, Smartphone } from 'lucide-react';
 
 export default function App() {
-  const { currentUser, loading: authLoading, isAnonymous } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const { isThemeModalOpen, setIsThemeModalOpen } = useTheme();
+  const {
+    user,
+    isAuthenticated,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
+    isProfileModalOpen,
+    setIsProfileModalOpen,
+  } = useAuth();
 
   // Privacy Mode (hide/show sensitive amounts)
   const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => {
@@ -149,10 +156,8 @@ export default function App() {
     }
   }, []);
 
-  // Real-time Firestore synchronization on mount (only when authenticated)
+  // Real-time Firestore synchronization on mount
   useEffect(() => {
-    if (!currentUser || isAnonymous) return;
-
     // Check and seed initial data once if this Firestore project is brand new
     seedFirestoreIfEmpty()
       .then(() => {
@@ -207,7 +212,7 @@ export default function App() {
       unsubDebts();
       unsubChat();
     };
-  }, [currentUser, isAnonymous]);
+  }, []);
 
   // Dynamically calculate financial health score based on active data
   const healthScore: FinancialHealthScore = useMemo(() => {
@@ -569,26 +574,6 @@ export default function App() {
     }
   };
 
-  // 1. Initial Firebase Auth loading screen
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-3 font-sans">
-        <Loader2 className="w-9 h-9 text-indigo-500 animate-spin" />
-        <span className="text-xs font-bold text-slate-300">Menghubungkan ke ArthaSmart Cloud...</span>
-      </div>
-    );
-  }
-
-  // 2. Authentication Wall / Gate (Login required before financial data is shown)
-  if (!currentUser || isAnonymous) {
-    return (
-      <>
-        <LoginGate />
-        <AuthModal />
-      </>
-    );
-  }
-
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-[#0B0F19] bg-mesh-light dark:bg-mesh-dark text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-300">
       {/* Executive Desktop & Mobile Drawer Sidebar */}
@@ -883,8 +868,18 @@ export default function App() {
         onClose={() => setIsThemeModalOpen(false)}
       />
 
-      {/* User Authentication & Verified Email Modal */}
-      <AuthModal />
+      {/* Web Authentication Modal (Login, Register & Demo Accounts) */}
+      <AuthModal
+        isOpen={isAuthModalOpen || !isAuthenticated}
+        onClose={() => setIsAuthModalOpen(false)}
+        isForcedLogin={!isAuthenticated}
+      />
+
+      {/* User Profile & Multi-Account Switcher Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
 
       {/* Global Toast Notification */}
       {toastMessage && (

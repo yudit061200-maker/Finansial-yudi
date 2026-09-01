@@ -1,265 +1,156 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import {
-  User,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signInWithPopup,
-  signOut,
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  updateProfile,
-  updatePassword,
-  signInAnonymously,
-} from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { UserProfile, LoginCredentials, RegisterCredentials, AuthSession } from '../types/user';
+import { authService, DEFAULT_WEB_USERS } from '../services/authService';
 
-export type AuthTab = 'login' | 'register' | 'forgot' | 'profile';
-
-export interface AuthContextType {
-  currentUser: User | null;
-  loading: boolean;
-  isAnonymous: boolean;
+interface AuthContextType {
+  user: UserProfile | null;
+  session: AuthSession | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  allUsers: UserProfile[];
+  refreshUsers: () => void;
+  login: (credentials: LoginCredentials) => Promise<{ success: boolean; message: string }>;
+  quickLogin: (userId: string) => Promise<{ success: boolean; message: string }>;
+  register: (credentials: RegisterCredentials) => Promise<{ success: boolean; message: string }>;
+  logout: () => void;
+  updateProfile: (updates: Partial<UserProfile>) => Promise<{ success: boolean; message: string }>;
+  changePassword: (oldPass: string, newPass: string) => Promise<{ success: boolean; message: string }>;
+  deleteUser: (userId: string) => Promise<{ success: boolean; message: string }>;
+  resetUsers: () => void;
   isAuthModalOpen: boolean;
-  authModalTab: AuthTab;
   setIsAuthModalOpen: (open: boolean) => void;
-  setAuthModalTab: (tab: AuthTab) => void;
-  openAuthModal: (tab?: AuthTab) => void;
-  closeAuthModal: () => void;
-  loginWithEmail: (email: string, pass: string) => Promise<User>;
-  registerWithEmail: (email: string, pass: string, displayName?: string) => Promise<User>;
-  loginWithGoogle: () => Promise<User>;
-  loginAnonymously: () => Promise<User>;
-  resetPassword: (email: string) => Promise<void>;
-  updateUserPassword: (newPass: string) => Promise<void>;
-  updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
-  logout: () => Promise<void>;
-  authError: string | null;
-  setAuthError: (err: string | null) => void;
+  isProfileModalOpen: boolean;
+  setIsProfileModalOpen: (open: boolean) => void;
+  authModalMode: 'login' | 'register' | 'demo';
+  setAuthModalMode: (mode: 'login' | 'register' | 'demo') => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper for human-readable Indonesian error messages from Firebase error codes
-export function getFriendlyAuthErrorMessage(error: any): string {
-  if (!error) return 'Terjadi kesalahan tidak terduga.';
-  const code = error.code || (typeof error === 'string' ? error : '');
-  const message = error.message || '';
-
-  if (code.includes('too-many-requests') || message.includes('quota') || message.includes('rate-limit') || message.includes('exceeded')) {
-    return 'Batas permintaan terlampaui (Rate Limit Exceeded). Firebase membatasi frekuensi pengiriman link email demi keamanan. Mohon tunggu 1-2 menit sebelum mencoba kembali.';
-  }
-
-  switch (code) {
-    case 'auth/invalid-email':
-      return 'Format alamat email tidak valid. Periksa kembali email Anda.';
-    case 'auth/user-disabled':
-      return 'Akun ini telah dinonaktifkan oleh administrator.';
-    case 'auth/user-not-found':
-      return 'Akun dengan email ini tidak ditemukan. Silakan daftar akun baru.';
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-      return 'Email atau password yang Anda masukkan salah. Silakan coba lagi.';
-    case 'auth/email-already-in-use':
-      return 'Email ini sudah terdaftar. Silakan masuk atau gunakan fitur lupa password.';
-    case 'auth/weak-password':
-      return 'Password terlalu lemah. Gunakan minimal 6 karakter kombinasi huruf dan angka.';
-    case 'auth/too-many-requests':
-      return 'Batas permintaan terlampaui (Rate Limit Exceeded). Harap tunggu 1-2 menit sebelum mencoba kirim ulang lagi.';
-    case 'auth/requires-recent-login':
-      return 'Sesi keamanan Anda telah berakhir. Harap login ulang untuk melanjutkan tindakan ini.';
-    case 'auth/network-request-failed':
-      return 'Gagal terhubung ke jaringan. Periksa koneksi internet Anda.';
-    case 'auth/popup-closed-by-user':
-      return 'Jendela login Google ditutup sebelum proses selesai.';
-    case 'auth/popup-blocked':
-      return 'Jendela popup diblokir oleh peramban (browser). Izinkan popup untuk login.';
-    case 'auth/operation-not-allowed':
-      return 'Metode login (Email/Password atau Google) belum diaktifkan di Firebase Console. Silakan aktifkan Sign-in provider di Firebase Console > Authentication.';
-    case 'auth/unverified-email':
-      return 'Email Anda belum diverifikasi. Silakan periksa inbox / spam email Anda.';
-    default:
-      return message || 'Terjadi kendala saat memproses otentikasi. Silakan coba lagi.';
-  }
-}
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authModalTab, setAuthModalTab] = useState<AuthTab>('login');
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'demo'>('login');
 
-  // Monitor Firebase Auth State
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+  const refreshUsers = useCallback(() => {
+    const users = authService.getUsers();
+    setAllUsers(users);
   }, []);
 
-  const openAuthModal = (tab: AuthTab = 'login') => {
-    setAuthModalTab(tab);
-    setAuthError(null);
-    setIsAuthModalOpen(true);
-  };
-
-  const closeAuthModal = () => {
-    setIsAuthModalOpen(false);
-    setAuthError(null);
-  };
-
-  // Register New Account with Email/Username & Password
-  const registerWithEmail = async (email: string, pass: string, displayName?: string): Promise<User> => {
-    setAuthError(null);
+  // Initialize session on mount
+  useEffect(() => {
     try {
-      const emailToUse = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@arthasmart.local`;
-      const cred = await createUserWithEmailAndPassword(auth, emailToUse, pass);
-      
-      // Update display name if provided
-      if (displayName && displayName.trim()) {
-        await updateProfile(cred.user, {
-          displayName: displayName.trim(),
-        });
-      }
+      const users = authService.getUsers();
+      setAllUsers(users);
+      const active = authService.getCurrentSession();
+      setSession(active);
+    } catch (e) {
+      console.error('Error initializing web auth:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-      setCurrentUser(cred.user);
-      return cred.user;
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Sign In with Email/Username and Password
-  const loginWithEmail = async (email: string, pass: string): Promise<User> => {
-    setAuthError(null);
-    try {
-      const emailToUse = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@arthasmart.local`;
-      const cred = await signInWithEmailAndPassword(auth, emailToUse, pass);
-      setCurrentUser(cred.user);
-      return cred.user;
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Login with Google
-  const loginWithGoogle = async (): Promise<User> => {
-    setAuthError(null);
-    try {
-      const cred = await signInWithPopup(auth, googleProvider);
-      setCurrentUser(cred.user);
-      return cred.user;
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Login Anonymously (Guest / Demo Mode)
-  const loginAnonymously = async (): Promise<User> => {
-    setAuthError(null);
-    try {
-      const cred = await signInAnonymously(auth);
-      setCurrentUser(cred.user);
-      return cred.user;
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Send Password Reset Email
-  const resetPassword = async (email: string): Promise<void> => {
-    setAuthError(null);
-    try {
-      const emailToUse = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@arthasmart.local`;
-      await sendPasswordResetEmail(auth, emailToUse);
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Update Password for current user
-  const updateUserPassword = async (newPass: string): Promise<void> => {
-    setAuthError(null);
-    if (!auth.currentUser) {
-      throw new Error('Anda belum masuk ke akun.');
-    }
-    try {
-      await updatePassword(auth.currentUser, newPass);
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Update User Profile Display Name / Photo
-  const updateUserProfile = async (displayName: string, photoURL?: string): Promise<void> => {
-    setAuthError(null);
-    if (!auth.currentUser) {
-      throw new Error('Anda belum masuk ke akun.');
-    }
-    try {
-      await updateProfile(auth.currentUser, {
-        displayName: displayName.trim(),
-        photoURL: photoURL || auth.currentUser.photoURL,
-      });
-      // Update local state
-      setCurrentUser({ ...auth.currentUser, displayName: displayName.trim() } as User);
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Sign out
-  const logout = async (): Promise<void> => {
-    try {
-      await signOut(auth);
-      setCurrentUser(null);
+  const login = async (credentials: LoginCredentials) => {
+    const res = authService.login(credentials);
+    if (res.success && res.session) {
+      setSession(res.session);
+      refreshUsers();
       setIsAuthModalOpen(false);
-    } catch (err: any) {
-      console.error('Logout error:', err);
     }
+    return { success: res.success, message: res.message };
   };
 
-  const isAnonymous = Boolean(currentUser?.isAnonymous);
+  const quickLogin = async (userId: string) => {
+    const res = authService.quickLogin(userId);
+    if (res.success && res.session) {
+      setSession(res.session);
+      refreshUsers();
+      setIsAuthModalOpen(false);
+    }
+    return { success: res.success, message: res.message };
+  };
+
+  const register = async (credentials: RegisterCredentials) => {
+    const res = authService.register(credentials);
+    if (res.success && res.session) {
+      setSession(res.session);
+      refreshUsers();
+      setIsAuthModalOpen(false);
+    }
+    return { success: res.success, message: res.message };
+  };
+
+  const logout = () => {
+    authService.logout();
+    setSession(null);
+    setIsAuthModalOpen(true);
+    setAuthModalMode('login');
+  };
+
+  const updateProfile = async (updates: Partial<UserProfile>) => {
+    if (!session?.user?.id) {
+      return { success: false, message: 'Tidak ada sesi login aktif.' };
+    }
+    const res = authService.updateProfile(session.user.id, updates);
+    if (res.success && res.user) {
+      setSession((prev) => (prev ? { ...prev, user: res.user! } : null));
+      refreshUsers();
+    }
+    return { success: res.success, message: res.message };
+  };
+
+  const changePassword = async (oldPass: string, newPass: string) => {
+    if (!session?.user?.id) {
+      return { success: false, message: 'Tidak ada sesi login aktif.' };
+    }
+    const res = authService.changePassword(session.user.id, oldPass, newPass);
+    return res;
+  };
+
+  const deleteUser = async (userId: string) => {
+    const res = authService.deleteUser(userId);
+    if (res.success) {
+      const active = authService.getCurrentSession();
+      setSession(active);
+      refreshUsers();
+    }
+    return res;
+  };
+
+  const resetUsers = () => {
+    const defaults = authService.resetToDefaultUsers();
+    setAllUsers(defaults);
+    const active = authService.getCurrentSession();
+    setSession(active);
+  };
 
   return (
     <AuthContext.Provider
       value={{
-        currentUser,
-        loading,
-        isAnonymous,
-        isAuthModalOpen,
-        authModalTab,
-        setIsAuthModalOpen,
-        setAuthModalTab,
-        openAuthModal,
-        closeAuthModal,
-        loginWithEmail,
-        registerWithEmail,
-        loginWithGoogle,
-        loginAnonymously,
-        resetPassword,
-        updateUserPassword,
-        updateUserProfile,
+        user: session?.user || null,
+        session,
+        isAuthenticated: !!session?.user,
+        isLoading,
+        allUsers,
+        refreshUsers,
+        login,
+        quickLogin,
+        register,
         logout,
-        authError,
-        setAuthError,
+        updateProfile,
+        changePassword,
+        deleteUser,
+        resetUsers,
+        isAuthModalOpen,
+        setIsAuthModalOpen,
+        isProfileModalOpen,
+        setIsProfileModalOpen,
+        authModalMode,
+        setAuthModalMode,
       }}
     >
       {children}

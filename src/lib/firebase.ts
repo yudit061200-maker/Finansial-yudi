@@ -1,9 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import {
-  getAuth,
-  GoogleAuthProvider,
-} from 'firebase/auth';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
 export const firebaseConfig = {
@@ -27,8 +24,7 @@ export const db = databaseId && databaseId !== '(default)'
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 
-// Google Auth Provider
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: 'select_account',
+// Ensure anonymous authentication so security rules are satisfied if needed
+signInAnonymously(auth).catch((err) => {
+  console.warn('Firebase anonymous auth notice:', err);
 });
