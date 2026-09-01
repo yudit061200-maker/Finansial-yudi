@@ -16,6 +16,9 @@ import {
   Sparkles,
   KeyRound,
   UserCheck,
+  ExternalLink,
+  HelpCircle,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,6 +33,7 @@ export const AuthModal: React.FC = () => {
     loginWithEmail,
     registerWithEmail,
     loginWithGoogle,
+    loginAnonymously,
     resetPassword,
     updateUserPassword,
     updateUserProfile,
@@ -314,9 +318,24 @@ export const AuthModal: React.FC = () => {
           )}
 
           {authError && (
-            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1">{authError}</div>
+            <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold space-y-2 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1">{authError}</div>
+              </div>
+              {(authError.includes('Firebase Console') || authError.includes('belum diaktifkan') || authError.includes('operation-not-allowed')) && (
+                <div className="pt-1">
+                  <a
+                    href="https://console.firebase.google.com/project/fit-figure-r9v0l/authentication/providers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] transition-all"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Buka Firebase Console (Sign-in Providers)</span>
+                  </a>
+                </div>
+              )}
             </div>
           )}
 

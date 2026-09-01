@@ -21,6 +21,12 @@ import {
   TrendingUp,
   CreditCard,
   LockKeyhole,
+  ExternalLink,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
 import { useAuth, AuthTab } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -30,6 +36,7 @@ export const LoginGate: React.FC = () => {
     loginWithEmail,
     registerWithEmail,
     loginWithGoogle,
+    loginAnonymously,
     resetPassword,
     authError,
     setAuthError,
@@ -51,7 +58,19 @@ export const LoginGate: React.FC = () => {
   // States
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showFirebaseGuide, setShowFirebaseGuide] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const firebaseConsoleUrl = 'https://console.firebase.google.com/project/fit-figure-r9v0l/authentication/providers';
+
+  // Automatically open guide if operation-not-allowed is detected
+  useEffect(() => {
+    if (authError && (authError.includes('Firebase Console') || authError.includes('belum diaktifkan') || authError.includes('operation-not-allowed'))) {
+      setShowFirebaseGuide(true);
+    }
+  }, [authError]);
 
   // Reset errors when switching tab
   useEffect(() => {
@@ -124,6 +143,27 @@ export const LoginGate: React.FC = () => {
     } finally {
       setIsGoogleLoading(false);
     }
+  };
+
+  // Handle Guest / Demo Login
+  const handleGuestLogin = async () => {
+    setIsGuestLoading(true);
+    setAuthError(null);
+    setSuccessMessage(null);
+
+    try {
+      await loginAnonymously();
+    } catch {
+      // Handled in context
+    } finally {
+      setIsGuestLoading(false);
+    }
+  };
+
+  const copyUrlToClipboard = () => {
+    navigator.clipboard.writeText(firebaseConsoleUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   // Handle Forgot Password
@@ -270,11 +310,76 @@ export const LoginGate: React.FC = () => {
             )}
 
             {authError && (
-              <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-                <div className="flex-1">{authError}</div>
+              <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs font-semibold space-y-2 animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">{authError}</div>
+                </div>
+
+                {(authError.includes('Firebase Console') || authError.includes('belum diaktifkan') || authError.includes('operation-not-allowed')) && (
+                  <button
+                    type="button"
+                    onClick={() => setShowFirebaseGuide(true)}
+                    className="mt-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 underline flex items-center gap-1 cursor-pointer hover:opacity-80"
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                    <span>Lihat Langkah Mengaktifkannya di Firebase Console →</span>
+                  </button>
+                )}
               </div>
             )}
+
+            {/* Firebase Activation Guide Box */}
+            <div className="rounded-2xl border border-indigo-200/90 dark:border-indigo-900/60 bg-indigo-50/70 dark:bg-indigo-950/40 p-3.5 text-left text-xs transition-all">
+              <button
+                type="button"
+                onClick={() => setShowFirebaseGuide(!showFirebaseGuide)}
+                className="w-full flex items-center justify-between text-indigo-900 dark:text-indigo-200 font-extrabold cursor-pointer select-none"
+              >
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>Panduan Aktivasi Login di Firebase Console</span>
+                </div>
+                {showFirebaseGuide ? (
+                  <ChevronUp className="w-4 h-4 text-indigo-500" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-indigo-500" />
+                )}
+              </button>
+
+              {showFirebaseGuide && (
+                <div className="mt-3 pt-3 border-t border-indigo-200/60 dark:border-indigo-800/60 space-y-2.5 text-slate-700 dark:text-slate-300 animate-in fade-in">
+                  <p className="text-[11px] leading-relaxed">
+                    Untuk mengaktifkan login <strong>Email/Password</strong> atau <strong>Google</strong> di project Firebase:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                    <li>Buka Firebase Console pada menu <strong>Authentication &gt; Sign-in method</strong>.</li>
+                    <li>Klik provider <strong>Email/Password</strong>, centang <strong>Enable</strong>, lalu klik <strong>Save</strong>.</li>
+                    <li>(Opsional) Aktifkan juga provider <strong>Google</strong> &amp; <strong>Anonymous</strong> bila dibutuhkan.</li>
+                  </ol>
+
+                  <div className="pt-2 flex flex-wrap items-center gap-2">
+                    <a
+                      href={firebaseConsoleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] transition-all shadow-xs"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Buka Firebase Sign-in Providers</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={copyUrlToClipboard}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-[11px] hover:bg-slate-50 cursor-pointer"
+                    >
+                      {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                      <span>{copiedLink ? 'Link Tersalin' : 'Salin URL'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Google Fast Sign-In */}
             {activeTab !== 'forgot' && (
@@ -534,6 +639,19 @@ export const LoginGate: React.FC = () => {
                 </button>
               </form>
             )}
+
+            {/* Quick Demo / Guest Access Divider & Button */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center">
+              <button
+                type="button"
+                onClick={handleGuestLogin}
+                disabled={isGuestLoading}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-100/80 hover:bg-slate-200 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isGuestLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-indigo-500" />}
+                <span>Masuk Cepat Mode Tamu / Demo</span>
+              </button>
+            </div>
 
           </div>
         </div>

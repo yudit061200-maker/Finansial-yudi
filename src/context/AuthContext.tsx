@@ -29,6 +29,7 @@ export interface AuthContextType {
   loginWithEmail: (email: string, pass: string) => Promise<User>;
   registerWithEmail: (email: string, pass: string, displayName?: string) => Promise<User>;
   loginWithGoogle: () => Promise<User>;
+  loginAnonymously: () => Promise<User>;
   resetPassword: (email: string) => Promise<void>;
   updateUserPassword: (newPass: string) => Promise<void>;
   updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
@@ -74,7 +75,7 @@ export function getFriendlyAuthErrorMessage(error: any): string {
     case 'auth/popup-blocked':
       return 'Jendela popup diblokir oleh peramban (browser). Izinkan popup untuk login.';
     case 'auth/operation-not-allowed':
-      return 'Metode login ini belum diaktifkan di Firebase Console.';
+      return 'Metode login (Email/Password atau Google) belum diaktifkan di Firebase Console. Silakan aktifkan Sign-in provider di Firebase Console > Authentication.';
     case 'auth/unverified-email':
       return 'Email Anda belum diverifikasi. Silakan periksa inbox / spam email Anda.';
     default:
@@ -162,6 +163,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Login Anonymously (Guest / Demo Mode)
+  const loginAnonymously = async (): Promise<User> => {
+    setAuthError(null);
+    try {
+      const cred = await signInAnonymously(auth);
+      setCurrentUser(cred.user);
+      return cred.user;
+    } catch (err: any) {
+      const msg = getFriendlyAuthErrorMessage(err);
+      setAuthError(msg);
+      throw new Error(msg);
+    }
+  };
+
   // Send Password Reset Email
   const resetPassword = async (email: string): Promise<void> => {
     setAuthError(null);
@@ -238,6 +253,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loginWithEmail,
         registerWithEmail,
         loginWithGoogle,
+        loginAnonymously,
         resetPassword,
         updateUserPassword,
         updateUserProfile,
