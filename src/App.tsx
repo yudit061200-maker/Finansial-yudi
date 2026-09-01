@@ -40,6 +40,7 @@ import { AiChatInput } from './components/AiChatInput';
 import { ReceiptScanner } from './components/ReceiptScanner';
 import { TransactionList } from './components/TransactionList';
 import { BudgetsAndGoals } from './components/BudgetsAndGoals';
+import { SalaryCalculator } from './components/SalaryCalculator';
 import { TransactionModal } from './components/TransactionModal';
 import { TransactionDetailModal } from './components/TransactionDetailModal';
 import { AccountModal } from './components/AccountModal';
@@ -49,7 +50,7 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { ThemeSelectorModal } from './components/ThemeSelectorModal';
 import { useTheme } from './context/ThemeContext';
 import { getCashSummary } from './utils/cashflow';
-import { isDebtPaid } from './utils/formatters';
+import { isDebtPaid, formatRupiah } from './utils/formatters';
 import { RotateCcw, Check, CloudCheck, Loader2, Smartphone } from 'lucide-react';
 
 export default function App() {
@@ -88,6 +89,7 @@ export default function App() {
 
   // Modals & Active Selections
   const [isNewTxModalOpen, setIsNewTxModalOpen] = useState(false);
+  const [newTxDefaultType, setNewTxDefaultType] = useState<'expense' | 'income' | 'transfer'>('expense');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedTransactionDetail, setSelectedTransactionDetail] = useState<Transaction | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -623,8 +625,14 @@ export default function App() {
             <TransactionList
               transactions={transactions}
               accounts={accounts}
+              debts={debts}
               isPrivacyMode={isPrivacyMode}
-              onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
+              onOpenNewTransaction={(type) => {
+                setEditingTransaction(null);
+                setNewTxDefaultType(type || 'expense');
+                setIsNewTxModalOpen(true);
+              }}
+              onNavigateToDebts={() => setActiveTab('debts')}
               onEditTransaction={(tx) => {
                 setEditingTransaction(tx);
                 setIsNewTxModalOpen(true);
@@ -692,6 +700,35 @@ export default function App() {
               onAddTransaction={handleAddTransaction}
             />
           )}
+
+          {activeTab === 'salary' && (
+            <SalaryCalculator
+              accounts={accounts}
+              isPrivacyMode={isPrivacyMode}
+              onSaveSalaryToIncome={(salaryRes, targetAccId) => {
+                const monthNames = [
+                  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+                ];
+                const periodText = `${monthNames[salaryRes.input.periodMonth - 1]} ${salaryRes.input.periodYear}`;
+                handleAddTransaction({
+                  date: new Date().toISOString().split('T')[0],
+                  title: `Gaji Karyawan (${salaryRes.input.employeeName || 'Saya'}) - ${periodText}`,
+                  amount: salaryRes.netSalary,
+                  type: 'income',
+                  category: 'Gaji & Payroll',
+                  subCategory: 'Gaji Bersih (THP)',
+                  accountId: targetAccId,
+                  paymentMethod: 'Transfer Payroll',
+                  notes: `Gaji Bruto: ${formatRupiah(salaryRes.grossSalary)}, Potongan BPJS: ${formatRupiah(salaryRes.bpjs.totalEmployeeBpjs)}, PPh 21 TER: ${formatRupiah(salaryRes.pph21.monthlyPph21)}, Potongan Lain: ${formatRupiah(salaryRes.otherDeductionsTotal)}`,
+                  tags: ['Gaji', 'Payroll', 'THP', periodText],
+                  source: 'manual',
+                  isVerified: true,
+                });
+                showToast(`Gaji sebesar ${formatRupiah(salaryRes.netSalary)} berhasil dicatat ke Kas Masuk!`);
+              }}
+            />
+          )}
         </main>
 
         {/* Executive Footbar */}
@@ -757,6 +794,7 @@ export default function App() {
         }}
         editTransaction={editingTransaction}
         accounts={accounts}
+        defaultType={newTxDefaultType}
       />
 
       {/* Transaction Details Modal */}

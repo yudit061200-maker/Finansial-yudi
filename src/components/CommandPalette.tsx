@@ -8,6 +8,7 @@ import {
   ReceiptText,
   HandCoins,
   Target,
+  Calculator,
   Eye,
   EyeOff,
   Sun,
@@ -157,6 +158,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         run: () => {
           onClose();
           onNavigate('budgets');
+        },
+      },
+      {
+        id: 'nav-salary',
+        title: 'Buka Penghitungan Gaji (Payroll)',
+        subtitle: 'Kalkulator Gaji Bersih (THP), Pajak PPh 21 TER & BPJS',
+        icon: Calculator,
+        category: 'Navigasi',
+        run: () => {
+          onClose();
+          onNavigate('salary');
         },
       },
       {

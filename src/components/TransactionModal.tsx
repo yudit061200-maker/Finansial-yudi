@@ -18,6 +18,7 @@ interface TransactionModalProps {
   onSave: (tx: Omit<Transaction, 'id'> | Transaction) => void;
   editTransaction?: Transaction | null;
   accounts: Account[];
+  defaultType?: TransactionType;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -26,8 +27,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSave,
   editTransaction,
   accounts,
+  defaultType = 'expense',
 }) => {
-  const [type, setType] = useState<TransactionType>('expense');
+  const [type, setType] = useState<TransactionType>(defaultType);
   const [amount, setAmount] = useState('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Makanan & Minuman');
@@ -49,17 +51,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setNotes(editTransaction.notes || '');
       setTagsInput(editTransaction.tags?.join(', ') || '');
     } else {
-      setType('expense');
+      setType(defaultType);
       setAmount('');
       setTitle('');
-      setCategory('Makanan & Minuman');
+      setCategory(defaultType === 'income' ? 'Gaji & Upah' : defaultType === 'transfer' ? 'Transfer Antar Akun' : 'Makanan & Minuman');
       setAccountId(accounts[0]?.id || '');
       setDestinationAccountId(accounts[1]?.id || '');
       setDate(getTodayDateString());
       setNotes('');
       setTagsInput('');
     }
-  }, [editTransaction, isOpen, accounts]);
+  }, [editTransaction, isOpen, accounts, defaultType]);
 
   if (!isOpen) return null;
 

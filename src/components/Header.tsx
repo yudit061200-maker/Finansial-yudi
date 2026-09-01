@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
-export type NavTab = 'dashboard' | 'transactions' | 'debts' | 'budgets' | 'aichat' | 'receipt';
+export type NavTab = 'dashboard' | 'transactions' | 'debts' | 'budgets' | 'salary' | 'aichat' | 'receipt';
 
 interface HeaderProps {
   activeTab: NavTab;
@@ -54,6 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
     transactions: { title: 'Mutasi & Transaksi', subtitle: 'Catatan Kas & Running Balance' },
     debts: { title: 'Buku Hutang & Piutang', subtitle: 'Jadwal Jatuh Tempo & Cicilan' },
     budgets: { title: 'Anggaran & Target', subtitle: 'Batas Pengeluaran & Tabungan' },
+    salary: { title: 'Penghitungan Gaji (Payroll)', subtitle: 'Kalkulator Gaji Bersih (THP), PPh 21 TER & BPJS' },
     aichat: { title: 'Asisten AI Gemini', subtitle: 'Konsultasi Finansial Pintar' },
     receipt: { title: 'Scan Struk OCR AI', subtitle: 'Pindai Struk Belanja Otomatis' },
   };
