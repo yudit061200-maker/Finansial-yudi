@@ -27,16 +27,11 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Info,
-  Sparkles,
-  Filter,
-  Layers,
   CreditCard,
-  HandCoins,
   Receipt,
   Plus,
   X,
-  Flame,
-  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface CashForecastCalendarProps {
@@ -60,21 +55,20 @@ interface DayCashData {
   isPast: boolean;
   isFuture: boolean;
 
-  // Actuals
+  // Actual registered transactions
   actualTransactions: Transaction[];
   actualIncome: number;
   actualExpense: number;
   actualNetFlow: number;
 
-  // Forecast & Debts
-  duePayables: DebtRecord[]; // Hutang / Cicilan jatuh tempo
-  dueReceivables: DebtRecord[]; // Piutang jatuh tempo
+  // Real scheduled debts / installments due on this day
+  duePayables: DebtRecord[];
+  dueReceivables: DebtRecord[];
   duePayablesAmount: number;
   dueReceivablesAmount: number;
-  estimatedDailyExpense: number;
 
-  // Balances
-  projectedNetFlow: number;
+  // Pure real daily net & running balance
+  dayNetFlow: number;
   endOfDayCashBalance: number;
   isLowestBalanceMonthDay?: boolean;
 }
@@ -95,9 +89,6 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
   const [currentYear, setCurrentYear] = useState<number>(today.getFullYear());
   const [currentMonth, setCurrentMonth] = useState<number>(today.getMonth()); // 0-indexed: 0 = Jan, 8 = Sep
   const [selectedDateStr, setSelectedDateStr] = useState<string | null>(getTodayDateString());
-  const [includeBurnRate, setIncludeBurnRate] = useState<boolean>(true);
-  const [activeViewMode, setActiveViewMode] = useState<'grid' | 'timeline'>('grid');
-  const [filterFlow, setFilterFlow] = useState<'all' | 'income' | 'expense' | 'due'>('all');
   const [detailModalOpen, setDetailModalOpen] = useState<boolean>(false);
 
   // Helper for masking amounts if privacy mode is on
@@ -112,22 +103,6 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
   const totalActualCashNow = useMemo(() => {
     return accounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
   }, [accounts]);
-
-  // Average Daily Expense Burn Rate (from actual expenses in the last 30 days)
-  const avgDailyBurnRate = useMemo(() => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(today.getDate() - 30);
-    const thirtyDaysAgoTime = thirtyDaysAgo.getTime();
-
-    const recentExpenses = transactions.filter((t) => {
-      if (t.type !== 'expense') return false;
-      const tTime = new Date(t.date).getTime();
-      return !isNaN(tTime) && tTime >= thirtyDaysAgoTime && tTime <= today.getTime();
-    });
-
-    const totalRecentExpense = recentExpenses.reduce((sum, t) => sum + t.amount, 0);
-    return Math.round(totalRecentExpense / 30) || 0;
-  }, [transactions, today]);
 
   // Month navigation handlers
   const handlePrevMonth = () => {
@@ -160,9 +135,9 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     return d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
   }, [currentYear, currentMonth]);
 
-  // Build Calendar Matrix with Actuals & Projections
+  // Build Calendar Matrix with 100% Real Actuals & Scheduled Installments (No Estimates/Burn Rate)
   const calendarData = useMemo(() => {
-    // 1. First, group all transactions by date key (YYYY-MM-DD)
+    // 1. Group all transactions by date key (YYYY-MM-DD)
     const txByDateMap = new Map<string, Transaction[]>();
     transactions.forEach((tx) => {
       const dateKey = tx.date ? tx.date.split('T')[0] : '';
@@ -173,48 +148,56 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       txByDateMap.get(dateKey)!.push(tx);
     });
 
-    // 2. Group active debts / due dates by day-of-month or specific dueDate
-    const duePayablesByDate = new Map<string, DebtRecord[]>();
-    const dueReceivablesByDate = new Map<string, DebtRecord[]>();
+    // Helper to extract active debts & installment items due on any specific date
+    const getDueForDate = (dateStr: string, dateObj: Date) => {
+      const dayOfMonth = dateObj.getDate();
+      const matchingPayables: DebtRecord[] = [];
+      const matchingReceivables: DebtRecord[] = [];
 
-    debts.forEach((debt) => {
-      if (isDebtPaid(debt)) return;
+      debts.forEach((debt) => {
+        if (isDebtPaid(debt)) return;
 
-      // If debt has an exact dueDate YYYY-MM-DD
-      if (debt.dueDate) {
-        const dKey = debt.dueDate.split('T')[0];
-        if (debt.type === 'receivable') {
-          if (!dueReceivablesByDate.has(dKey)) dueReceivablesByDate.set(dKey, []);
-          dueReceivablesByDate.get(dKey)!.push(debt);
-        } else {
-          if (!duePayablesByDate.has(dKey)) duePayablesByDate.set(dKey, []);
-          duePayablesByDate.get(dKey)!.push(debt);
+        let isDue = false;
+        if (debt.dueDate && debt.dueDate.split('T')[0] === dateStr) {
+          isDue = true;
+        } else if (debt.isInstallment && debt.dueDayOfMonth && debt.dueDayOfMonth === dayOfMonth) {
+          isDue = true;
         }
-      }
 
-      // If it's a monthly installment with dueDayOfMonth (e.g. tanggal 5, 10, 25)
-      if (debt.isInstallment && debt.dueDayOfMonth) {
-        const padMonth = String(currentMonth + 1).padStart(2, '0');
-        const padDay = String(Math.min(28, debt.dueDayOfMonth)).padStart(2, '0');
-        const recurringKey = `${currentYear}-${padMonth}-${padDay}`;
-
-        if (!duePayablesByDate.has(recurringKey)) duePayablesByDate.set(recurringKey, []);
-        // Avoid duplicate if dueDate matched already
-        if (!duePayablesByDate.get(recurringKey)!.some((d) => d.id === debt.id)) {
-          duePayablesByDate.get(recurringKey)!.push(debt);
+        if (isDue) {
+          if (debt.type === 'receivable') {
+            matchingReceivables.push(debt);
+          } else {
+            matchingPayables.push(debt);
+          }
         }
-      }
-    });
+      });
 
-    // 3. Generate Calendar Days (including leading and trailing days from adjacent months)
+      const payablesAmount = matchingPayables.reduce((sum, d) => {
+        const installmentAmt = d.monthlyInstallment || d.remainingAmount;
+        return sum + Math.min(installmentAmt, d.remainingAmount);
+      }, 0);
+
+      const receivablesAmount = matchingReceivables.reduce((sum, d) => {
+        const installmentAmt = d.monthlyInstallment || d.remainingAmount;
+        return sum + Math.min(installmentAmt, d.remainingAmount);
+      }, 0);
+
+      return {
+        payables: matchingPayables,
+        receivables: matchingReceivables,
+        payablesAmount,
+        receivablesAmount,
+      };
+    };
+
+    // 2. Generate Calendar Days (leading, current month, trailing)
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
     const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
     const daysInMonth = lastDayOfMonth.getDate();
 
-    // Start with Monday as 0 or Sunday as 0 (Indonesian standard: Senin - Minggu)
-    // getDay(): 0 = Sun, 1 = Mon, ..., 6 = Sat
-    let startDayOfWeek = firstDayOfMonth.getDay(); // 0-6
-    // Shift so Monday = 0, Sunday = 6
+    // Monday = 0, Sunday = 6
+    const startDayOfWeek = firstDayOfMonth.getDay();
     const startOffset = (startDayOfWeek + 6) % 7;
 
     const daysList: DayCashData[] = [];
@@ -225,6 +208,11 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       const pDay = prevMonthLastDay - i;
       const pDate = new Date(currentYear, currentMonth - 1, pDay);
       const pDateStr = formatDateToYMD(pDate);
+      const dayTxs = txByDateMap.get(pDateStr) || [];
+      const actualIncome = dayTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+      const actualExpense = dayTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      const dueInfo = getDueForDate(pDateStr, pDate);
+
       daysList.push({
         date: pDate,
         dateStr: pDateStr,
@@ -234,16 +222,15 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         isToday: pDateStr === todayStr,
         isPast: pDateStr < todayStr,
         isFuture: pDateStr > todayStr,
-        actualTransactions: txByDateMap.get(pDateStr) || [],
-        actualIncome: 0,
-        actualExpense: 0,
-        actualNetFlow: 0,
-        duePayables: duePayablesByDate.get(pDateStr) || [],
-        dueReceivables: dueReceivablesByDate.get(pDateStr) || [],
-        duePayablesAmount: 0,
-        dueReceivablesAmount: 0,
-        estimatedDailyExpense: 0,
-        projectedNetFlow: 0,
+        actualTransactions: dayTxs,
+        actualIncome,
+        actualExpense,
+        actualNetFlow: actualIncome - actualExpense,
+        duePayables: dueInfo.payables,
+        dueReceivables: dueInfo.receivables,
+        duePayablesAmount: dueInfo.payablesAmount,
+        dueReceivablesAmount: dueInfo.receivablesAmount,
+        dayNetFlow: actualIncome + dueInfo.receivablesAmount - actualExpense - dueInfo.payablesAmount,
         endOfDayCashBalance: 0,
       });
     }
@@ -257,26 +244,9 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       const isFuture = cDateStr > todayStr;
 
       const dayTxs = txByDateMap.get(cDateStr) || [];
-      const actualIncome = dayTxs
-        .filter((t) => t.type === 'income')
-        .reduce((sum, t) => sum + t.amount, 0);
-      const actualExpense = dayTxs
-        .filter((t) => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
-      const actualNetFlow = actualIncome - actualExpense;
-
-      const payables = duePayablesByDate.get(cDateStr) || [];
-      const receivables = dueReceivablesByDate.get(cDateStr) || [];
-
-      const duePayablesAmount = payables.reduce((sum, d) => {
-        const installmentAmt = d.monthlyInstallment || d.remainingAmount;
-        return sum + Math.min(installmentAmt, d.remainingAmount);
-      }, 0);
-
-      const dueReceivablesAmount = receivables.reduce((sum, d) => sum + d.remainingAmount, 0);
-
-      // Estimated daily expense (if future and enabled)
-      const estExpense = isFuture && includeBurnRate ? avgDailyBurnRate : 0;
+      const actualIncome = dayTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+      const actualExpense = dayTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      const dueInfo = getDueForDate(cDateStr, cDate);
 
       daysList.push({
         date: cDate,
@@ -290,22 +260,26 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         actualTransactions: dayTxs,
         actualIncome,
         actualExpense,
-        actualNetFlow,
-        duePayables: payables,
-        dueReceivables: receivables,
-        duePayablesAmount,
-        dueReceivablesAmount,
-        estimatedDailyExpense: estExpense,
-        projectedNetFlow: actualNetFlow - (isFuture ? duePayablesAmount + estExpense : 0) + (isFuture ? dueReceivablesAmount : 0),
-        endOfDayCashBalance: 0, // Will be computed in chronological pass below
+        actualNetFlow: actualIncome - actualExpense,
+        duePayables: dueInfo.payables,
+        dueReceivables: dueInfo.receivables,
+        duePayablesAmount: dueInfo.payablesAmount,
+        dueReceivablesAmount: dueInfo.receivablesAmount,
+        dayNetFlow: actualIncome + dueInfo.receivablesAmount - actualExpense - dueInfo.payablesAmount,
+        endOfDayCashBalance: 0,
       });
     }
 
-    // Trailing days from next month to complete 35 or 42 grid cells
+    // Trailing days from next month
     const remainingCells = (7 - (daysList.length % 7)) % 7;
     for (let n = 1; n <= remainingCells; n++) {
       const nDate = new Date(currentYear, currentMonth + 1, n);
       const nDateStr = formatDateToYMD(nDate);
+      const dayTxs = txByDateMap.get(nDateStr) || [];
+      const actualIncome = dayTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+      const actualExpense = dayTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      const dueInfo = getDueForDate(nDateStr, nDate);
+
       daysList.push({
         date: nDate,
         dateStr: nDateStr,
@@ -315,105 +289,104 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         isToday: nDateStr === todayStr,
         isPast: nDateStr < todayStr,
         isFuture: nDateStr > todayStr,
-        actualTransactions: txByDateMap.get(nDateStr) || [],
-        actualIncome: 0,
-        actualExpense: 0,
-        actualNetFlow: 0,
-        duePayables: duePayablesByDate.get(nDateStr) || [],
-        dueReceivables: dueReceivablesByDate.get(nDateStr) || [],
-        duePayablesAmount: 0,
-        dueReceivablesAmount: 0,
-        estimatedDailyExpense: 0,
-        projectedNetFlow: 0,
+        actualTransactions: dayTxs,
+        actualIncome,
+        actualExpense,
+        actualNetFlow: actualIncome - actualExpense,
+        duePayables: dueInfo.payables,
+        dueReceivables: dueInfo.receivables,
+        duePayablesAmount: dueInfo.payablesAmount,
+        dueReceivablesAmount: dueInfo.receivablesAmount,
+        dayNetFlow: actualIncome + dueInfo.receivablesAmount - actualExpense - dueInfo.payablesAmount,
         endOfDayCashBalance: 0,
       });
     }
 
-    // 4. Compute Cumulative Running Balance Timeline:
-    // Today's balance is totalActualCashNow.
-    // Backward pass for past days:
-    // Balance(Day-1) = Balance(Day) - Incomes(Day) + Expenses(Day)
-    // Forward pass for future days:
-    // Balance(Day+1) = Balance(Day) + Incomes(Day+1) - (Expenses + DueBills + BurnRate)(Day+1)
-
-    // Sort all transactions chronologically to calculate absolute running balance accurately
-    const sortedAllTxs = [...transactions].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-
-    // Build absolute daily balance map for past and today
-    // Map: dateStr -> actual end of day balance
-    const dateToBalanceMap = new Map<string, number>();
-    
-    // If we have totalActualCashNow as today's balance, we calculate backward from today
-    let runningBackwards = totalActualCashNow;
-    
-    // Find index of today in calendar or anchor by today
-    const currentMonthDays = daysList.filter((d) => d.isCurrentMonth);
-
-    // Let's find today's position
-    const todayIndex = currentMonthDays.findIndex((d) => d.isToday);
+    // 3. Compute 100% Real Running Cash Balances Across All Days
+    const todayIndex = daysList.findIndex((d) => d.isToday);
 
     if (todayIndex !== -1) {
-      // Current month contains today!
-      // Set today's balance
-      currentMonthDays[todayIndex].endOfDayCashBalance = totalActualCashNow;
+      // Current calendar grid contains TODAY
+      daysList[todayIndex].endOfDayCashBalance = totalActualCashNow;
 
-      // Backward from today
-      let prevBal = totalActualCashNow;
+      // Backward propagation for past days in grid:
+      // prevDayBalance = nextDayBalance - nextDayActualIncome + nextDayActualExpense
       for (let i = todayIndex - 1; i >= 0; i--) {
-        const nextDay = currentMonthDays[i + 1];
-        // prevDayBalance = nextDayBalance - nextDayIncome + nextDayExpense
-        prevBal = prevBal - nextDay.actualIncome + nextDay.actualExpense;
-        currentMonthDays[i].endOfDayCashBalance = prevBal;
+        const nextDay = daysList[i + 1];
+        daysList[i].endOfDayCashBalance =
+          daysList[i + 1].endOfDayCashBalance - nextDay.actualIncome + nextDay.actualExpense;
       }
 
-      // Forward from today into future
-      let forwardBal = totalActualCashNow;
-      for (let i = todayIndex + 1; i < currentMonthDays.length; i++) {
-        const day = currentMonthDays[i];
-        const netChange = day.actualIncome + day.dueReceivablesAmount - day.actualExpense - day.duePayablesAmount - day.estimatedDailyExpense;
-        forwardBal += netChange;
-        day.endOfDayCashBalance = forwardBal;
+      // Forward propagation for future days in grid:
+      // forwardDayBalance = prevDayBalance + actualIncome + dueReceivables - actualExpense - duePayables
+      for (let i = todayIndex + 1; i < daysList.length; i++) {
+        const current = daysList[i];
+        const prev = daysList[i - 1];
+        daysList[i].endOfDayCashBalance =
+          prev.endOfDayCashBalance +
+          current.actualIncome +
+          current.dueReceivablesAmount -
+          current.actualExpense -
+          current.duePayablesAmount;
       }
     } else {
-      // Month is either entirely in the past or entirely in the future
-      const monthFirstDate = new Date(currentYear, currentMonth, 1);
-      if (monthFirstDate < today) {
-        // Month in past: calculate from totalActualCashNow back to that month
-        // Or calculate forward from the beginning
-        let bal = totalActualCashNow;
-        // Collect all transactions between that month end and today to subtract/add
-        const txsAfter = transactions.filter((t) => new Date(t.date) > lastDayOfMonth);
-        const incomeAfter = txsAfter.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-        const expenseAfter = txsAfter.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-        let endOfMonthBalance = bal - incomeAfter + expenseAfter;
+      // Month is entirely in the past or entirely in the future
+      const firstGridDate = daysList[0].date;
+      const lastGridDate = daysList[daysList.length - 1].date;
 
-        for (let i = currentMonthDays.length - 1; i >= 0; i--) {
-          currentMonthDays[i].endOfDayCashBalance = endOfMonthBalance;
-          endOfMonthBalance = endOfMonthBalance - currentMonthDays[i].actualIncome + currentMonthDays[i].actualExpense;
+      if (lastGridDate < today) {
+        // ENTIRELY PAST: Step backward from today's actual total cash balance
+        // Collect all transactions occurred between the last day in grid and today
+        const lastGridDateStr = daysList[daysList.length - 1].dateStr;
+        const txsAfterGrid = transactions.filter((t) => {
+          const tDateStr = t.date ? t.date.split('T')[0] : '';
+          return tDateStr > lastGridDateStr && tDateStr <= todayStr;
+        });
+        const netAfterGrid = txsAfterGrid.reduce(
+          (sum, t) => sum + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0),
+          0
+        );
+
+        let runningBal = totalActualCashNow - netAfterGrid;
+        daysList[daysList.length - 1].endOfDayCashBalance = runningBal;
+
+        for (let i = daysList.length - 2; i >= 0; i--) {
+          const nextDay = daysList[i + 1];
+          daysList[i].endOfDayCashBalance =
+            daysList[i + 1].endOfDayCashBalance - nextDay.actualIncome + nextDay.actualExpense;
         }
       } else {
-        // Month in future: project forward from today
-        // Calculate forward from today's balance to the start of this future month
-        let forwardBal = totalActualCashNow;
-        // Project day by day from today to future month
-        const daysDiff = Math.ceil((monthFirstDate.getTime() - today.getTime()) / (1000 * 3600 * 24));
-        // Add rough burn rate & intermediate debts
-        if (includeBurnRate) {
-          forwardBal -= (daysDiff * avgDailyBurnRate);
+        // ENTIRELY FUTURE: Step forward from today's actual cash balance through intervening days
+        let runningBal = totalActualCashNow;
+        const cursorDate = new Date(today);
+        cursorDate.setDate(cursorDate.getDate() + 1);
+
+        while (formatDateToYMD(cursorDate) < daysList[0].dateStr) {
+          const cStr = formatDateToYMD(cursorDate);
+          const cTxs = txByDateMap.get(cStr) || [];
+          const cIncome = cTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+          const cExpense = cTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+          const cDue = getDueForDate(cStr, cursorDate);
+          runningBal += cIncome + cDue.receivablesAmount - cExpense - cDue.payablesAmount;
+          cursorDate.setDate(cursorDate.getDate() + 1);
         }
 
-        for (let i = 0; i < currentMonthDays.length; i++) {
-          const day = currentMonthDays[i];
-          const netChange = day.actualIncome + day.dueReceivablesAmount - day.actualExpense - day.duePayablesAmount - day.estimatedDailyExpense;
-          forwardBal += netChange;
-          day.endOfDayCashBalance = forwardBal;
+        // Now calculate for all grid days forward
+        for (let i = 0; i < daysList.length; i++) {
+          const current = daysList[i];
+          runningBal +=
+            current.actualIncome +
+            current.dueReceivablesAmount -
+            current.actualExpense -
+            current.duePayablesAmount;
+          current.endOfDayCashBalance = runningBal;
         }
       }
     }
 
-    // Identify Lowest Balance Day in the current month (Titik Kritis Kas)
+    const currentMonthDays = daysList.filter((d) => d.isCurrentMonth);
+
+    // Identify Lowest Balance Day in the current month (Titik Kas Terendah)
     let lowestBalance = Infinity;
     let lowestDayIndex = -1;
     currentMonthDays.forEach((d, idx) => {
@@ -441,8 +414,6 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     today,
     todayStr,
     totalActualCashNow,
-    includeBurnRate,
-    avgDailyBurnRate,
   ]);
 
   // Selected Day Details
@@ -451,7 +422,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     return calendarData.daysList.find((d) => d.dateStr === selectedDateStr) || null;
   }, [selectedDateStr, calendarData.daysList]);
 
-  // Summary Metrics for the current month
+  // Summary Metrics for the current month (100% Real)
   const monthSummary = useMemo(() => {
     const days = calendarData.currentMonthDays;
     if (!days || days.length === 0) {
@@ -474,7 +445,6 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     const totalExpenseMonth = days.reduce((sum, d) => sum + d.actualExpense, 0);
     const totalDuePayablesMonth = days.reduce((sum, d) => sum + d.duePayablesAmount, 0);
     const totalDueReceivablesMonth = days.reduce((sum, d) => sum + d.dueReceivablesAmount, 0);
-    const totalEstimatedBurn = days.reduce((sum, d) => sum + d.estimatedDailyExpense, 0);
 
     const netMonthChange = projectedEndBalance - startBalance;
 
@@ -485,7 +455,6 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       totalExpenseMonth,
       totalDuePayablesMonth,
       totalDueReceivablesMonth,
-      totalEstimatedBurn,
       netMonthChange,
       isDeficit: projectedEndBalance < 0 || netMonthChange < 0,
     };
@@ -494,26 +463,26 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
   const weekDayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
   return (
-    <div className="fintech-card rounded-3xl p-5 sm:p-6.5 transition-all space-y-6">
+    <div id="cash-forecast-calendar-section" className="fintech-card rounded-3xl p-5 sm:p-6.5 transition-all space-y-6">
       {/* 1. Header & Navigation Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-100 dark:border-slate-800">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800 flex items-center gap-1.5">
               <CalendarIcon className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-              Proyeksi Likuiditas & Sisa Kas
+              Kalender Sisa Kas Riil
             </span>
             <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-              Data Riil Aktual
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              Perhitungan Riil (Transaksi & Cicilan Aktual)
             </span>
           </div>
 
           <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white tracking-tight mt-1">
-            Kalender Perkiraan Sisa Kas
+            Posisi Sisa Kas Harian Terjadwal
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-medium max-w-2xl mt-0.5">
-            Pantau posisi saldo kas akhir hari secara harian, lengkap dengan pencatatan mutasi aktual, jadwal jatuh tempo hutang/cicilan, dan estimasi daya tahan kas.
+            Dihitung murni dari saldo riil akun, mutasi transaksi aktual, serta jadwal jatuh tempo cicilan hutang dan piutang tanpa estimasi asumsi biaya hidup.
           </p>
         </div>
 
@@ -522,6 +491,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
           {/* Month Controller */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700">
             <button
+              id="calendar-prev-month-btn"
               onClick={handlePrevMonth}
               className="p-1.5 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer"
               title="Bulan Sebelumnya"
@@ -532,6 +502,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
               {monthName}
             </span>
             <button
+              id="calendar-next-month-btn"
               onClick={handleNextMonth}
               className="p-1.5 hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-all cursor-pointer"
               title="Bulan Berikutnya"
@@ -542,36 +513,22 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
 
           {/* Jump to Today button */}
           <button
+            id="calendar-today-btn"
             onClick={handleJumpToToday}
             className="px-3 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/90 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl transition-all cursor-pointer"
           >
             Hari Ini
           </button>
-
-          {/* Burn rate toggle */}
-          <button
-            onClick={() => setIncludeBurnRate((prev) => !prev)}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
-              includeBurnRate
-                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-            }`}
-            title="Sertakan estimasi biaya hidup harian (~"
-          >
-            <Flame className={`w-3.5 h-3.5 ${includeBurnRate ? 'text-amber-600 dark:text-amber-400 fill-amber-500/20' : 'text-slate-400'}`} />
-            <span className="hidden sm:inline">Burn Rate Harian:</span>
-            <span>{includeBurnRate ? formatMoney(avgDailyBurnRate, true) + '/hari' : 'Off'}</span>
-          </button>
         </div>
       </div>
 
-      {/* 2. Key Month Financial Health Banner & Insights */}
+      {/* 2. Key Month Financial Health Banner & Metrics (100% Real) */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Metric 1: Saldo Awal vs Akhir Bulan */}
+        {/* Metric 1: Sisa Kas Akhir Bulan */}
         <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Proyeksi Akhir Bulan
+              Sisa Kas Akhir Bulan
             </span>
             <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
               <Wallet className="w-3.5 h-3.5" />
@@ -593,7 +550,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
           </div>
         </div>
 
-        {/* Metric 2: Pemasukan Bulan Ini */}
+        {/* Metric 2: Total Inflow Kas Bulan Ini */}
         <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-900/50 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider">
@@ -614,11 +571,11 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
           </div>
         </div>
 
-        {/* Metric 3: Pengeluaran & Tagihan */}
+        {/* Metric 3: Total Outflow & Tagihan */}
         <div className="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200/70 dark:border-rose-900/50 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-rose-800 dark:text-rose-400 uppercase tracking-wider">
-              Outflow & Tagihan
+              Total Outflow & Cicilan
             </span>
             <div className="w-6 h-6 rounded-lg bg-rose-100 dark:bg-rose-900 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -626,7 +583,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
           </div>
           <div className="mt-2">
             <div className="text-lg sm:text-xl font-black font-mono tracking-tight text-rose-600 dark:text-rose-400 tabular-nums">
-              -{formatMoney(monthSummary.totalExpenseMonth + monthSummary.totalDuePayablesMonth + (includeBurnRate ? monthSummary.totalEstimatedBurn : 0))}
+              -{formatMoney(monthSummary.totalExpenseMonth + monthSummary.totalDuePayablesMonth)}
             </div>
             <div className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 mt-1 truncate">
               Aktual: {formatMoney(monthSummary.totalExpenseMonth, true)}
@@ -672,13 +629,13 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
           {calendarData.daysList.map((day, cellIdx) => {
             const isSelected = selectedDateStr === day.dateStr;
-            const hasActivity = day.actualTransactions.length > 0 || day.duePayables.length > 0 || day.dueReceivables.length > 0;
             const isPositiveEnd = day.endOfDayCashBalance >= 0;
             const isCriticalLow = day.endOfDayCashBalance < 500000;
 
             return (
               <div
                 key={`cash-cell-${day.dateStr}-${cellIdx}`}
+                id={`calendar-cell-${day.dateStr}`}
                 onClick={() => {
                   setSelectedDateStr(day.dateStr);
                   setDetailModalOpen(true);
@@ -757,7 +714,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
                   )}
                 </div>
 
-                {/* End-of-day Cash Balance */}
+                {/* End-of-day Cash Balance (Pure Real) */}
                 <div className="pt-1 border-t border-slate-100 dark:border-slate-800/80 mt-auto">
                   <div className="text-[9px] text-slate-400 font-semibold truncate leading-tight">
                     Sisa Kas:
@@ -780,7 +737,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         </div>
       </div>
 
-      {/* 4. Legend & Quick Action Footer */}
+      {/* 4. Legend & Action Footer */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-medium">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -800,6 +757,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         <div className="flex items-center gap-2">
           {onOpenNewTransaction && (
             <button
+              id="calendar-add-tx-btn"
               onClick={() => onOpenNewTransaction(selectedDateStr || todayStr)}
               className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all cursor-pointer shadow-xs inline-flex items-center gap-1.5"
             >
@@ -810,7 +768,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         </div>
       </div>
 
-      {/* 5. Interactive Day Detail Modal / Slide-over */}
+      {/* 5. Interactive Day Detail Modal */}
       {detailModalOpen && selectedDayData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
@@ -819,7 +777,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                    {selectedDayData.isPast ? 'Tanggal Lampau' : selectedDayData.isToday ? 'Hari Ini' : 'Proyeksi Masa Depan'}
+                    {selectedDayData.isPast ? 'Tanggal Lampau' : selectedDayData.isToday ? 'Hari Ini' : 'Terjadwal'}
                   </span>
                   <span className="text-xs text-slate-400 font-mono">
                     {selectedDayData.dateStr}
@@ -830,6 +788,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
                 </h3>
               </div>
               <button
+                id="close-calendar-detail-modal-btn"
                 onClick={() => setDetailModalOpen(false)}
                 className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
@@ -837,17 +796,19 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
               </button>
             </div>
 
-            {/* End of Day Cash KPI */}
+            {/* End of Day Cash KPI (Pure Real Calculation) */}
             <div className="p-4.5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white border border-slate-800 flex items-center justify-between shadow-md">
               <div>
                 <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider block">
-                  Perkiraan Saldo Sisa Kas Akhir Hari
+                  Saldo Sisa Kas Akhir Hari
                 </span>
                 <div className="text-2xl font-black font-mono tracking-tight mt-1 text-white tabular-nums">
                   {formatMoney(selectedDayData.endOfDayCashBalance)}
                 </div>
                 <span className="text-xs text-slate-300 mt-1 block">
-                  {selectedDayData.isPast ? 'Status: Terkunci (Aktual)' : 'Status: Estimasi Berdasarkan Mutasi & Tagihan'}
+                  {selectedDayData.isPast
+                    ? 'Status: Posisi Riil Berdasarkan Mutasi Tercatat'
+                    : 'Status: Posisi Riil Berdasarkan Saldo Akun & Jadwal Cicilan'}
                 </span>
               </div>
               <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-white shrink-0">
@@ -987,16 +948,6 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* Estimated Daily Burn note */}
-            {selectedDayData.isFuture && includeBurnRate && avgDailyBurnRate > 0 && (
-              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300">
-                <Flame className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>
-                  Termasuk alokasi perkiraan biaya hidup harian <strong>~{formatMoney(avgDailyBurnRate)}</strong> untuk menjaga akurasi proyeksi sisa kas.
-                </span>
               </div>
             )}
 

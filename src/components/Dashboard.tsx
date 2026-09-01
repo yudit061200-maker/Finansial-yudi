@@ -42,7 +42,6 @@ import {
 } from 'lucide-react';
 import { NavTab } from './Header';
 import { ConfirmModal } from './ConfirmModal';
-import { DailyCashForecastWidget } from './DailyCashForecastWidget';
 import { CashForecastCalendar } from './CashForecastCalendar';
 
 interface DashboardProps {
@@ -604,18 +603,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
-      {/* Widget Perkiraan Sisa Kas Harian (Proyeksi Dinamis & Simulasi Burn Rate) */}
-      <DailyCashForecastWidget
-        accounts={accounts}
-        transactions={transactions}
-        debts={debts}
-        budgets={budgets}
-        isPrivacyMode={isPrivacyMode}
-        onOpenNewTransaction={onOpenNewTransaction}
-        onNavigateToDebts={() => onNavigate('debts')}
-      />
-
-      {/* Kalender Perkiraan Sisa Kas (Aktual & Proyeksi Likuiditas) */}
+      {/* Kalender Perkiraan Sisa Kas (Perhitungan Riil Mutasi Transaksi & Jadwal Cicilan) */}
       <CashForecastCalendar
         accounts={accounts}
         transactions={transactions}
