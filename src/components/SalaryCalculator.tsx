@@ -153,7 +153,7 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   const companyCalculations = useMemo(() => {
     return companies.map((comp) => {
       const cutOff = getCutOffDateRange(periodYear, periodMonth, comp.cutOffConfig.cutOffDay);
-      const attendance = calculateCompanyScheduleAttendance(comp.id, schedules, cutOff.dateList);
+      const attendance = calculateCompanyScheduleAttendance(comp.id, schedules, cutOff.dateList, companies);
 
       const salaryInput: SalaryInput = {
         employeeName,

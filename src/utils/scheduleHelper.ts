@@ -110,72 +110,95 @@ export function getCutOffDateRange(
 }
 
 /**
+ * Helper untuk mengambil atau mengonstruksi data jadwal hari (WorkScheduleDay) secara deterministik
+ */
+export function getOrConstructDaySchedule(
+  dateStr: string,
+  scheduleDaysMap: Record<string, WorkScheduleDay> = {},
+  companies: CompanySalaryProfile[] = []
+): WorkScheduleDay {
+  if (scheduleDaysMap[dateStr]) {
+    return scheduleDaysMap[dateStr];
+  }
+
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dateObj = new Date(y, m - 1, d);
+  const dayOfWeek = dateObj.getDay();
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const holidayName = INDONESIAN_HOLIDAYS[dateStr];
+  const isHoliday = !!holidayName;
+
+  const assignments: Record<string, DayCompanyAssignment> = {};
+  if (companies.length > 0) {
+    companies.forEach((comp, idx) => {
+      if (idx === 0) {
+        assignments[comp.id] = {
+          status: isWeekend || isHoliday ? 'off' : 'work',
+          shiftName: isWeekend || isHoliday ? 'Libur' : 'Kerja',
+          overtimeHours: 0,
+        };
+      } else {
+        assignments[comp.id] = {
+          status: isWeekend ? 'work' : 'off',
+          shiftName: isWeekend ? 'Kerja Weekend' : 'Libur',
+          overtimeHours: 0,
+        };
+      }
+    });
+  } else {
+    // Fallback default companies jika list profil belum ada
+    assignments['company_a'] = {
+      status: isWeekend || isHoliday ? 'off' : 'work',
+      shiftName: isWeekend || isHoliday ? 'Libur' : 'Kerja',
+      overtimeHours: 0,
+    };
+    assignments['company_b'] = {
+      status: isWeekend ? 'work' : 'off',
+      shiftName: isWeekend ? 'Kerja Weekend' : 'Libur',
+      overtimeHours: 0,
+    };
+  }
+
+  return {
+    date: dateStr,
+    dayOfWeek,
+    dayNumber: d,
+    month: m,
+    year: y,
+    isHoliday,
+    holidayName,
+    assignments,
+  };
+}
+
+/**
  * Generate Hari Kalender Lengkap untuk suatu Bulan (atau Mode Cut-Off)
  */
 export function generateMonthScheduleDays(
   year: number,
   month: number,
   existingSchedules: Record<string, WorkScheduleDay> = {},
-  defaultCompanyAId = 'company_a',
-  defaultCompanyBId = 'company_b'
+  companies: CompanySalaryProfile[] = []
 ): WorkScheduleDay[] {
   const daysInMonth = new Date(year, month, 0).getDate();
   const scheduleDays: WorkScheduleDay[] = [];
 
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateObj = new Date(year, month - 1, d);
-    const dayOfWeek = dateObj.getDay(); // 0 (Minggu) - 6 (Sabtu)
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-
-    if (existingSchedules[dateStr]) {
-      scheduleDays.push(existingSchedules[dateStr]);
-      continue;
-    }
-
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const holidayName = INDONESIAN_HOLIDAYS[dateStr];
-    const isHoliday = !!holidayName;
-
-    // Default status:
-    // PT A: Senin - Jumat Masuk (work), Sabtu-Minggu Libur (off)
-    // PT B: Shift / Harian di Sabtu-Minggu atau Fleksibel
-    const defaultAssignmentA: DayCompanyAssignment = {
-      status: isWeekend || isHoliday ? 'off' : 'work',
-      shiftName: isWeekend ? 'Libur' : 'Office Hour (09:00 - 18:00)',
-      overtimeHours: 0,
-    };
-
-    const defaultAssignmentB: DayCompanyAssignment = {
-      status: isWeekend ? 'work' : 'off', // Sambilan di weekend / harian
-      shiftName: isWeekend ? 'Weekend Shift' : 'Off',
-      overtimeHours: 0,
-    };
-
-    scheduleDays.push({
-      date: dateStr,
-      dayOfWeek,
-      dayNumber: d,
-      month,
-      year,
-      isHoliday,
-      holidayName,
-      assignments: {
-        [defaultCompanyAId]: defaultAssignmentA,
-        [defaultCompanyBId]: defaultAssignmentB,
-      },
-    });
+    scheduleDays.push(getOrConstructDaySchedule(dateStr, existingSchedules, companies));
   }
 
   return scheduleDays;
 }
 
 /**
- * Menghitung Total Kehadiran, Hari Masuk, Cuti, dan Lembur per Perusahaan pada Range Cut-off
+ * Menghitung Total Kehadiran, Hari Masuk, dan Lembur per Perusahaan pada Range Cut-off
  */
 export function calculateCompanyScheduleAttendance(
   companyId: string,
-  scheduleDaysMap: Record<string, WorkScheduleDay>,
-  dateList: string[]
+  scheduleDaysMap: Record<string, WorkScheduleDay> = {},
+  dateList: string[],
+  companies: CompanySalaryProfile[] = []
 ): {
   actualWorkingDays: number; // Jumlah hari masuk kerja
   fullWorkDays: number;
@@ -190,23 +213,11 @@ export function calculateCompanyScheduleAttendance(
   let overtimeHours = 0;
 
   for (const dateStr of dateList) {
-    const day = scheduleDaysMap[dateStr];
-    if (!day || !day.assignments || !day.assignments[companyId]) {
-      // Default: check if weekend
-      const dateObj = new Date(dateStr);
-      const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-      if (isWeekend) {
-        offDays++;
-      } else {
-        fullWorkDays++;
-      }
-      continue;
-    }
-
-    const assignment = day.assignments[companyId];
+    const day = getOrConstructDaySchedule(dateStr, scheduleDaysMap, companies);
+    const assignment = day.assignments?.[companyId] || { status: 'off', overtimeHours: 0 };
     overtimeHours += assignment.overtimeHours || 0;
 
-    // Sistem absensi disederhanakan: Kerja atau Libur
+    // Sistem absensi: Kerja atau Libur
     if (assignment.status === 'work' || assignment.status === 'overtime' || assignment.status === 'half_day') {
       fullWorkDays++;
     } else {

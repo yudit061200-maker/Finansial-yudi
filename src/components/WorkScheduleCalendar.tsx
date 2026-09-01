@@ -7,6 +7,8 @@ import {
 } from '../types/salary';
 import {
   getCutOffDateRange,
+  getOrConstructDaySchedule,
+  calculateCompanyScheduleAttendance,
   INDONESIAN_HOLIDAYS,
   WORK_STATUS_META,
   BADGE_COLOR_MAP,
@@ -106,74 +108,16 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
   };
 
   // Helper to get or construct schedule day for all active companies
-  const getDaySchedule = (dateStr: string, dayNum: number, m: number, y: number): WorkScheduleDay => {
-    if (schedules[dateStr]) {
-      return schedules[dateStr];
-    }
-    const dObj = new Date(y, m - 1, dayNum);
-    const dayOfWeek = dObj.getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const isHoliday = !!INDONESIAN_HOLIDAYS[dateStr];
-
-    const initialAssignments: Record<string, DayCompanyAssignment> = {};
-    companies.forEach((comp, idx) => {
-      // First company defaults to Mon-Fri work, others default to weekend or off
-      if (idx === 0) {
-        initialAssignments[comp.id] = {
-          status: isWeekend || isHoliday ? 'off' : 'work',
-          shiftName: isWeekend ? 'Libur' : 'Office',
-          overtimeHours: 0,
-        };
-      } else {
-        initialAssignments[comp.id] = {
-          status: isWeekend ? 'work' : 'off',
-          shiftName: isWeekend ? 'Weekend Shift' : 'Off',
-          overtimeHours: 0,
-        };
-      }
-    });
-
-    return {
-      date: dateStr,
-      dayOfWeek,
-      dayNumber: dayNum,
-      month: m,
-      year: y,
-      isHoliday,
-      holidayName: INDONESIAN_HOLIDAYS[dateStr],
-      assignments: initialAssignments,
-    };
+  const getDaySchedule = (dateStr: string, _dayNum?: number, _m?: number, _y?: number): WorkScheduleDay => {
+    return getOrConstructDaySchedule(dateStr, schedules, companies);
   };
 
   // Calculate statistics per company within its own cut-off dates
   const calculateAttendance = (company: CompanySalaryProfile) => {
     const cutOff = getCutOffDateRange(year, month, company.cutOffConfig.cutOffDay);
-    let fullWorkDays = 0;
-    let offDays = 0;
-    let overtimeHours = 0;
-
-    for (const dStr of cutOff.dateList) {
-      const parts = dStr.split('-').map(Number);
-      const dayData = getDaySchedule(dStr, parts[2], parts[1], parts[0]);
-      const assignment = dayData.assignments[company.id] || { status: 'off', overtimeHours: 0 };
-
-      overtimeHours += assignment.overtimeHours || 0;
-      if (assignment.status === 'work' || assignment.status === 'overtime' || assignment.status === 'half_day') {
-        fullWorkDays++;
-      } else {
-        offDays++;
-      }
-    }
-
-    const actualWorkingDays = fullWorkDays;
+    const stats = calculateCompanyScheduleAttendance(company.id, schedules, cutOff.dateList, companies);
     return {
-      actualWorkingDays,
-      fullWorkDays,
-      halfDays: 0,
-      offDays,
-      leaveDays: 0,
-      sickDays: 0,
-      overtimeHours,
+      ...stats,
       cutOff,
     };
   };
