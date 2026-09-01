@@ -14,12 +14,11 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
-export type AuthTab = 'login' | 'register' | 'forgot' | 'verify' | 'profile';
+export type AuthTab = 'login' | 'register' | 'forgot' | 'profile';
 
 export interface AuthContextType {
   currentUser: User | null;
   loading: boolean;
-  isEmailVerified: boolean;
   isAnonymous: boolean;
   isAuthModalOpen: boolean;
   authModalTab: AuthTab;
@@ -30,11 +29,9 @@ export interface AuthContextType {
   loginWithEmail: (email: string, pass: string) => Promise<User>;
   registerWithEmail: (email: string, pass: string, displayName?: string) => Promise<User>;
   loginWithGoogle: () => Promise<User>;
-  sendVerificationEmail: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateUserPassword: (newPass: string) => Promise<void>;
   updateUserProfile: (displayName: string, photoURL?: string) => Promise<void>;
-  reloadUser: () => Promise<boolean>;
   logout: () => Promise<void>;
   authError: string | null;
   setAuthError: (err: string | null) => void;
@@ -113,24 +110,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthError(null);
   };
 
-  // Sign In with Email and Password
-  const loginWithEmail = async (email: string, pass: string): Promise<User> => {
-    setAuthError(null);
-    try {
-      const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
-      return cred.user;
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Register New Account with Email & Password + Automatically Send Verification Link
+  // Register New Account with Email/Username & Password
   const registerWithEmail = async (email: string, pass: string, displayName?: string): Promise<User> => {
     setAuthError(null);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      const emailToUse = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@arthasmart.local`;
+      const cred = await createUserWithEmailAndPassword(auth, emailToUse, pass);
       
       // Update display name if provided
       if (displayName && displayName.trim()) {
@@ -139,13 +124,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       }
 
-      // Automatically send Email Verification link
-      try {
-        await sendEmailVerification(cred.user);
-      } catch (verifErr) {
-        console.warn('Auto send verification notice:', verifErr);
-      }
-
+      setCurrentUser(cred.user);
       return cred.user;
     } catch (err: any) {
       const msg = getFriendlyAuthErrorMessage(err);
@@ -154,27 +133,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Login with Google (Auto Verified)
+  // Sign In with Email/Username and Password
+  const loginWithEmail = async (email: string, pass: string): Promise<User> => {
+    setAuthError(null);
+    try {
+      const emailToUse = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@arthasmart.local`;
+      const cred = await signInWithEmailAndPassword(auth, emailToUse, pass);
+      setCurrentUser(cred.user);
+      return cred.user;
+    } catch (err: any) {
+      const msg = getFriendlyAuthErrorMessage(err);
+      setAuthError(msg);
+      throw new Error(msg);
+    }
+  };
+
+  // Login with Google
   const loginWithGoogle = async (): Promise<User> => {
     setAuthError(null);
     try {
       const cred = await signInWithPopup(auth, googleProvider);
+      setCurrentUser(cred.user);
       return cred.user;
-    } catch (err: any) {
-      const msg = getFriendlyAuthErrorMessage(err);
-      setAuthError(msg);
-      throw new Error(msg);
-    }
-  };
-
-  // Send Email Verification link to Current User
-  const sendVerificationEmail = async (): Promise<void> => {
-    setAuthError(null);
-    if (!auth.currentUser) {
-      throw new Error('Tidak ada akun yang sedang aktif.');
-    }
-    try {
-      await sendEmailVerification(auth.currentUser);
     } catch (err: any) {
       const msg = getFriendlyAuthErrorMessage(err);
       setAuthError(msg);
@@ -186,7 +166,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const resetPassword = async (email: string): Promise<void> => {
     setAuthError(null);
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      const emailToUse = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@arthasmart.local`;
+      await sendPasswordResetEmail(auth, emailToUse);
     } catch (err: any) {
       const msg = getFriendlyAuthErrorMessage(err);
       setAuthError(msg);
@@ -220,8 +201,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         displayName: displayName.trim(),
         photoURL: photoURL || auth.currentUser.photoURL,
       });
-      // Force trigger state reload
-      await reloadUser();
+      // Update local state
+      setCurrentUser({ ...auth.currentUser, displayName: displayName.trim() } as User);
     } catch (err: any) {
       const msg = getFriendlyAuthErrorMessage(err);
       setAuthError(msg);
@@ -229,33 +210,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Reload user from Firebase backend to immediately check if email was verified in mailbox
-  const reloadUser = async (): Promise<boolean> => {
-    if (!auth.currentUser) return false;
-    try {
-      await auth.currentUser.reload();
-      const reloadedUser = auth.currentUser;
-      setCurrentUser(reloadedUser ? Object.assign(Object.create(Object.getPrototypeOf(reloadedUser)), reloadedUser) : null);
-      return reloadedUser?.emailVerified ?? false;
-    } catch (err) {
-      console.warn('Reload user failed:', err);
-      return false;
-    }
-  };
-
   // Sign out
   const logout = async (): Promise<void> => {
     try {
       await signOut(auth);
-      // Fallback to anonymous auth to ensure continuous read/write rules compliance if needed
-      signInAnonymously(auth).catch(() => {});
+      setCurrentUser(null);
       setIsAuthModalOpen(false);
     } catch (err: any) {
       console.error('Logout error:', err);
     }
   };
 
-  const isEmailVerified = Boolean(currentUser && (currentUser.emailVerified || currentUser.isAnonymous === false && currentUser.providerData.some(p => p.providerId === 'google.com')));
   const isAnonymous = Boolean(currentUser?.isAnonymous);
 
   return (
@@ -263,7 +228,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       value={{
         currentUser,
         loading,
-        isEmailVerified,
         isAnonymous,
         isAuthModalOpen,
         authModalTab,
@@ -274,11 +238,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loginWithEmail,
         registerWithEmail,
         loginWithGoogle,
-        sendVerificationEmail,
         resetPassword,
         updateUserPassword,
         updateUserProfile,
-        reloadUser,
         logout,
         authError,
         setAuthError,

@@ -62,7 +62,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const { theme, toggleTheme, palette, setPalette, paletteConfig, setIsThemeModalOpen } = useTheme();
-  const { currentUser, isEmailVerified, isAnonymous, openAuthModal } = useAuth();
+  const { currentUser, isAnonymous, openAuthModal } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when opened
@@ -125,26 +125,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         id: 'auth-action',
         title: currentUser && !isAnonymous ? 'Kelola Akun & Profil' : 'Masuk / Daftar Akun',
         subtitle: currentUser && !isAnonymous
-          ? `${currentUser.email} • ${isEmailVerified ? 'Email Terverifikasi ✓' : 'Belum Verifikasi ⚠'}`
-          : 'Masuk dengan Email & Password Terverifikasi atau Google',
-        icon: isEmailVerified ? ShieldCheck : ShieldAlert,
-        category: 'Keamanan & Akun',
-        run: () => {
-          onClose();
-          openAuthModal(currentUser && !isAnonymous ? (isEmailVerified ? 'profile' : 'verify') : 'login');
-        },
-      },
-      {
-        id: 'verify-email-action',
-        title: 'Status & Link Verifikasi Email',
-        subtitle: isEmailVerified
-          ? 'Akun Anda sudah terverifikasi dengan aman'
-          : 'Kirim ulang link verifikasi atau cek status email',
+          ? `${currentUser.displayName || currentUser.email} • Akun Aktif`
+          : 'Masuk dengan Akun Pengguna atau Google',
         icon: ShieldCheck,
         category: 'Keamanan & Akun',
         run: () => {
           onClose();
-          openAuthModal('verify');
+          openAuthModal(currentUser && !isAnonymous ? 'profile' : 'login');
         },
       },
       {

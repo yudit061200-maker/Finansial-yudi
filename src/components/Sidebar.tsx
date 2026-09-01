@@ -69,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { theme, toggleTheme, paletteConfig, setIsThemeModalOpen } = useTheme();
-  const { currentUser, isEmailVerified, isAnonymous, openAuthModal, logout } = useAuth();
+  const { currentUser, isAnonymous, openAuthModal, logout } = useAuth();
 
   const formatMoney = (amount: number) => {
     if (isPrivacyMode) return 'Rp ••••••••';
@@ -312,7 +312,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 onClick={() => {
                   if (isOpenMobile && onCloseMobile) onCloseMobile();
-                  openAuthModal(isEmailVerified ? 'profile' : 'verify');
+                  openAuthModal('profile');
                 }}
                 className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer group"
                 title="Kelola Akun & Profil"
@@ -342,30 +342,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            {/* Email Verification Status Pill */}
-            <button
-              onClick={() => {
-                if (isOpenMobile && onCloseMobile) onCloseMobile();
-                openAuthModal('verify');
-              }}
-              className={`w-full py-1 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-between cursor-pointer transition-all border ${
-                isEmailVerified
-                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80 hover:bg-emerald-100'
-                  : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80 hover:bg-amber-100'
-              }`}
-            >
+            {/* Account Status Pill */}
+            <div className="w-full py-1 px-2 rounded-lg text-[10px] font-extrabold flex items-center justify-between border bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80">
               <div className="flex items-center gap-1.5">
-                {isEmailVerified ? (
-                  <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <ShieldAlert className="w-3 h-3 text-amber-600 dark:text-amber-400 animate-pulse" />
-                )}
-                <span>{isEmailVerified ? 'Email Terverifikasi' : 'Verifikasi Email'}</span>
+                <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                <span>Akun Pengguna Aktif</span>
               </div>
               <span className="text-[9px] font-semibold opacity-80">
-                {isEmailVerified ? 'Aman' : 'Kirim Ulang'}
+                Online
               </span>
-            </button>
+            </div>
           </div>
         ) : (
           <button
@@ -385,7 +371,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   Masuk / Daftar Akun
                 </div>
                 <div className="text-[10px] text-indigo-700/80 dark:text-indigo-300/80 font-medium">
-                  Email & Password Terverifikasi
+                  Akses Data Web Pengguna
                 </div>
               </div>
             </div>

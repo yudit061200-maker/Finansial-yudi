@@ -5,7 +5,6 @@ import {
   Lock,
   User,
   ShieldCheck,
-  ShieldAlert,
   CheckCircle2,
   AlertCircle,
   Eye,
@@ -16,16 +15,13 @@ import {
   LogOut,
   Sparkles,
   KeyRound,
-  ExternalLink,
-  Shield,
-  HelpCircle,
+  UserCheck,
 } from 'lucide-react';
-import { useAuth, AuthTab } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 export const AuthModal: React.FC = () => {
   const {
     currentUser,
-    isEmailVerified,
     isAnonymous,
     isAuthModalOpen,
     authModalTab,
@@ -34,11 +30,9 @@ export const AuthModal: React.FC = () => {
     loginWithEmail,
     registerWithEmail,
     loginWithGoogle,
-    sendVerificationEmail,
     resetPassword,
     updateUserPassword,
     updateUserProfile,
-    reloadUser,
     logout,
     authError,
     setAuthError,
@@ -56,19 +50,7 @@ export const AuthModal: React.FC = () => {
   // Action loading states & custom notifications
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [isSendingVerif, setIsSendingVerif] = useState(false);
-  const [isCheckingVerif, setIsCheckingVerif] = useState(false);
-  const [verifCooldown, setVerifCooldown] = useState(0);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
-
-  // Verification cooldown interval
-  useEffect(() => {
-    if (verifCooldown <= 0) return;
-    const timer = setInterval(() => {
-      setVerifCooldown((prev) => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [verifCooldown]);
 
   // Sync display name when currentUser changes
   useEffect(() => {
@@ -94,7 +76,7 @@ export const AuthModal: React.FC = () => {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setAuthError('Mohon isi email dan password Anda.');
+      setAuthError('Mohon isi email/username dan password Anda.');
       return;
     }
 
@@ -103,14 +85,9 @@ export const AuthModal: React.FC = () => {
     setActionSuccessMessage(null);
 
     try {
-      const user = await loginWithEmail(email, password);
-      if (!user.emailVerified) {
-        setAuthModalTab('verify');
-        setActionSuccessMessage('Berhasil masuk! Jangan lupa verifikasi email Anda.');
-      } else {
-        setActionSuccessMessage('Berhasil masuk ke akun terverifikasi!');
-        setTimeout(() => closeAuthModal(), 1200);
-      }
+      await loginWithEmail(email, password);
+      setActionSuccessMessage('Berhasil masuk ke akun!');
+      setTimeout(() => closeAuthModal(), 1000);
     } catch {
       // Auth error is automatically handled in context
     } finally {
@@ -122,7 +99,7 @@ export const AuthModal: React.FC = () => {
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setAuthError('Mohon isi alamat email dan password.');
+      setAuthError('Mohon isi email/username dan password.');
       return;
     }
     if (password.length < 6) {
@@ -140,8 +117,8 @@ export const AuthModal: React.FC = () => {
 
     try {
       await registerWithEmail(email, password, displayName);
-      setAuthModalTab('verify');
-      setActionSuccessMessage('Akun berhasil dibuat! Link verifikasi telah dikirimkan ke email Anda.');
+      setActionSuccessMessage('Akun pengguna berhasil dibuat!');
+      setTimeout(() => closeAuthModal(), 1000);
     } catch {
       // Error handled in context
     } finally {
@@ -157,8 +134,8 @@ export const AuthModal: React.FC = () => {
 
     try {
       await loginWithGoogle();
-      setActionSuccessMessage('Berhasil masuk dengan akun Google terverifikasi!');
-      setTimeout(() => closeAuthModal(), 1200);
+      setActionSuccessMessage('Berhasil masuk dengan akun Google!');
+      setTimeout(() => closeAuthModal(), 1000);
     } catch {
       // Error handled in context
     } finally {
@@ -185,46 +162,6 @@ export const AuthModal: React.FC = () => {
       // Error handled in context
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  // Handle Send Verification Email
-  const handleSendVerification = async () => {
-    if (verifCooldown > 0) return;
-    setIsSendingVerif(true);
-    setAuthError(null);
-    setActionSuccessMessage(null);
-
-    try {
-      await sendVerificationEmail();
-      setVerifCooldown(60);
-      setActionSuccessMessage('Email verifikasi baru berhasil dikirim! Silakan periksa inbox / spam Anda.');
-    } catch (err: any) {
-      setVerifCooldown(45);
-      // Error is set in context
-    } finally {
-      setIsSendingVerif(false);
-    }
-  };
-
-  // Handle Reload / Check Email Verification Status
-  const handleCheckVerification = async () => {
-    setIsCheckingVerif(true);
-    setAuthError(null);
-    setActionSuccessMessage(null);
-
-    try {
-      const verified = await reloadUser();
-      if (verified) {
-        setActionSuccessMessage('Hebat! Email Anda telah terverifikasi.');
-        setTimeout(() => closeAuthModal(), 1400);
-      } else {
-        setAuthError('Email belum terverifikasi di server. Pastikan Anda telah mengklik link yang dikirimkan ke inbox email Anda.');
-      }
-    } catch {
-      setAuthError('Gagal memeriksa status verifikasi email. Silakan coba lagi.');
-    } finally {
-      setIsCheckingVerif(false);
     }
   };
 
@@ -298,15 +235,13 @@ export const AuthModal: React.FC = () => {
                 {authModalTab === 'login' && 'Masuk ke Akun'}
                 {authModalTab === 'register' && 'Daftar Akun Baru'}
                 {authModalTab === 'forgot' && 'Reset Password'}
-                {authModalTab === 'verify' && 'Verifikasi Email'}
-                {authModalTab === 'profile' && 'Profil & Keamanan Akun'}
+                {authModalTab === 'profile' && 'Profil Pengguna'}
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                {authModalTab === 'login' && 'Akses data keuangan terverifikasi'}
-                {authModalTab === 'register' && 'Daftar dengan email & password terverifikasi'}
+                {authModalTab === 'login' && 'Akses data keuangan & multi-perangkat'}
+                {authModalTab === 'register' && 'Buat akun pengguna web'}
                 {authModalTab === 'forgot' && 'Kirim instruksi pemulihan ke email'}
-                {authModalTab === 'verify' && 'Status verifikasi akun email Anda'}
-                {authModalTab === 'profile' && 'Kelola kredensial & otentikasi'}
+                {authModalTab === 'profile' && 'Kelola nama tampilan & password'}
               </p>
             </div>
           </div>
@@ -361,32 +296,9 @@ export const AuthModal: React.FC = () => {
                 setAuthError(null);
                 setActionSuccessMessage(null);
               }}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                authModalTab === 'profile'
-                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-              }`}
+              className="flex-1 py-2 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs transition-all cursor-pointer"
             >
-              Profil Akun
-            </button>
-            <button
-              onClick={() => {
-                setAuthModalTab('verify');
-                setAuthError(null);
-                setActionSuccessMessage(null);
-              }}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                authModalTab === 'verify'
-                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-              }`}
-            >
-              <span>Verifikasi Email</span>
-              {isEmailVerified ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              ) : (
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-              )}
+              Profil & Pengaturan Akun
             </button>
           </div>
         )}
@@ -411,19 +323,18 @@ export const AuthModal: React.FC = () => {
           {/* ===================== TAB 1: LOGIN ===================== */}
           {authModalTab === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
-              {/* Email field */}
+              {/* Email / Username field */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                  <span>Alamat Email</span>
-                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Wajib Terverifikasi</span>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Email atau Username
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     id="input-login-email"
-                    type="email"
+                    type="text"
                     required
-                    placeholder="nama@email.com"
+                    placeholder="nama@email.com atau username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
@@ -542,7 +453,7 @@ export const AuthModal: React.FC = () => {
                     id="input-register-name"
                     type="text"
                     required
-                    placeholder="Contoh: Yudit Ramadhan"
+                    placeholder="Contoh: Yudit"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
@@ -550,19 +461,18 @@ export const AuthModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Email */}
+              {/* Email / Username */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                  <span>Alamat Email Aktif</span>
-                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">Tautan verifikasi akan dikirim</span>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Email atau Username
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     id="input-register-email"
-                    type="email"
+                    type="text"
                     required
-                    placeholder="nama@email.com"
+                    placeholder="nama@email.com atau username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
@@ -635,7 +545,7 @@ export const AuthModal: React.FC = () => {
                 ) : (
                   <Sparkles className="w-4 h-4" />
                 )}
-                <span>{isSubmitting ? 'Mendaftarkan Akun...' : 'Daftar & Kirim Verifikasi'}</span>
+                <span>{isSubmitting ? 'Mendaftarkan Akun...' : 'Daftar Akun Baru'}</span>
               </button>
             </form>
           )}
@@ -686,89 +596,7 @@ export const AuthModal: React.FC = () => {
             </form>
           )}
 
-          {/* ===================== TAB 4: VERIFY EMAIL ===================== */}
-          {authModalTab === 'verify' && (
-            <div className="space-y-4">
-              {/* Current Status Box */}
-              <div
-                className={`p-4 rounded-2xl border flex items-start gap-3 ${
-                  isEmailVerified
-                    ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800/80 text-emerald-900 dark:text-emerald-200'
-                    : 'bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800/80 text-amber-900 dark:text-amber-200'
-                }`}
-              >
-                {isEmailVerified ? (
-                  <ShieldCheck className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                ) : (
-                  <ShieldAlert className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                )}
-                <div className="space-y-1">
-                  <h3 className="font-extrabold text-sm">
-                    {isEmailVerified ? 'Email Terverifikasi ✓' : 'Email Belum Terverifikasi'}
-                  </h3>
-                  <p className="text-xs opacity-90">
-                    Alamat email:{' '}
-                    <strong className="underline">{currentUser?.email || email || 'Belum masuk'}</strong>
-                  </p>
-                  <p className="text-[11px] opacity-80 leading-relaxed pt-1">
-                    {isEmailVerified
-                      ? 'Akun Anda aman dan seluruh fitur pencatatan keuangan tersinkronisasi tanpa batasan.'
-                      : 'Untuk menjaga keamanan dan validitas akun, silakan klik link verifikasi yang telah kami kirimkan ke email Anda.'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Action Buttons for Unverified User */}
-              {!isEmailVerified && (
-                <div className="space-y-2.5 pt-1">
-                  {/* Button 1: Kirim Ulang Link Verifikasi */}
-                  <button
-                    onClick={handleSendVerification}
-                    disabled={isSendingVerif || verifCooldown > 0 || !currentUser}
-                    className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-xs cursor-pointer disabled:opacity-50"
-                  >
-                    {isSendingVerif ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                    <span>
-                      {isSendingVerif
-                        ? 'Mengirim Ulang...'
-                        : verifCooldown > 0
-                        ? `Tunggu (${verifCooldown}s) untuk Kirim Ulang`
-                        : 'Kirim Ulang Link Verifikasi Email'}
-                    </span>
-                  </button>
-
-                  {/* Button 2: Cek Status Verifikasi */}
-                  <button
-                    onClick={handleCheckVerification}
-                    disabled={isCheckingVerif || !currentUser}
-                    className="w-full py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-extrabold text-xs transition-all flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${isCheckingVerif ? 'animate-spin' : ''}`} />
-                    <span>{isCheckingVerif ? 'Mengecek Server...' : 'Saya Sudah Klik Link / Cek Status'}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Tips & Instructions */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 space-y-1.5">
-                <div className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <HelpCircle className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Tips jika email belum masuk:</span>
-                </div>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>Periksa folder <strong>Spam / Junk</strong> atau tab <strong>Promosi</strong> di Gmail / penyedia email Anda.</li>
-                  <li>Pastikan penulisan alamat email sudah benar tanpa typo.</li>
-                  <li>Tunggu 1-2 menit sebelum menekan tombol kirim ulang.</li>
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {/* ===================== TAB 5: PROFILE & SECURITY ===================== */}
+          {/* ===================== TAB 4: PROFILE & SECURITY ===================== */}
           {authModalTab === 'profile' && isLoggedInUser && (
             <div className="space-y-4">
               {/* Profile Card */}
@@ -788,25 +616,9 @@ export const AuthModal: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Verification Badge */}
-                  <div
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase border ${
-                      isEmailVerified
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                        : 'bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                    }`}
-                  >
-                    {isEmailVerified ? (
-                      <>
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        <span>Terverifikasi</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShieldAlert className="w-3 h-3 text-amber-600" />
-                        <span>Belum Verifikasi</span>
-                      </>
-                    )}
+                  <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wide uppercase border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800">
+                    <UserCheck className="w-3 h-3 text-emerald-600" />
+                    <span>Aktif</span>
                   </div>
                 </div>
               </div>
