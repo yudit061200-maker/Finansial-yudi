@@ -11,11 +11,11 @@ export type PtkpStatus =
 
 export type TerCategory = 'A' | 'B' | 'C';
 
-export type EmploymentType = 'permanent' | 'contract' | 'freelance';
-
-export type SalaryBasis = 'monthly' | 'daily';
+export type EmploymentType = 'permanent' | 'contract' | 'freelance' | 'shift' | 'part_time';
 
 export type WorkStatus = 'work' | 'off' | 'leave' | 'sick' | 'overtime' | 'half_day';
+
+export type BadgeColor = 'indigo' | 'emerald' | 'amber' | 'cyan' | 'purple' | 'rose' | 'blue' | 'teal' | 'orange';
 
 export interface CompanyCutOffConfig {
   cutOffDay: number; // Tanggal tutup penghitungan (misal: 20 -> 21 bln lalu s.d 20 bln ini; 31 -> 1 s.d akhir bulan)
@@ -44,25 +44,31 @@ export interface WorkScheduleDay {
 }
 
 export interface CompanySalaryProfile {
-  id: string; // 'company_a' | 'company_b'
+  id: string; // unique ID
   companyName: string;
   jobTitle: string;
-  badgeColor: 'indigo' | 'emerald' | 'amber' | 'cyan' | 'purple' | 'rose';
+  badgeColor: BadgeColor;
   employmentType: EmploymentType;
-  salaryBasis: SalaryBasis;
-  baseSalary: number;
-  dailyRate: number;
-  standardWorkingDays: number;
-  isProratedMonthly: boolean;
-  isDailyTransport: boolean;
-  dailyTransportRate: number;
-  fixedAllowance: number;
-  transportAllowance: number;
-  otherAllowance: number;
-  overtimeHours: number;
-  overtimeRatePerHour: number;
-  bonusOrThr: number;
+  
+  // Komponen Penghasilan Pokok & Daily Rate
+  baseSalary: number; // Gaji Pokok Bulanan (bisa 0 jika murni harian)
+  dailyRate: number; // Tarif Upah per Hari Masuk (bisa 0 jika murni gaji bulanan tetap)
+  standardWorkingDays: number; // Target hari kerja standar sebulan
+  isProratedBaseSalary?: boolean; // Opsi jika gaji pokok diprorata berdasarkan rasio hari masuk
 
+  // Tunjangan
+  isDailyTransport: boolean; // Tunjangan transport dihitung per hari hadir
+  dailyTransportRate: number; // Nominal transport per hari hadir
+  fixedAllowance: number; // Tunjangan Tetap (Jabatan, Keahlian, dll)
+  transportAllowance: number; // Tunjangan Transport / Makan (Flat Bulanan jika isDailyTransport false)
+  otherAllowance: number; // Tunjangan Lainnya
+
+  // Lembur & Bonus
+  overtimeHours: number; // Jam Lembur sebulan (default atau dari jadwal)
+  overtimeRatePerHour: number; // Tarif lembur per jam (0 = hitung otomatis 1/173)
+  bonusOrThr: number; // Bonus Project / THR / Insentif
+
+  // BPJS & Pajak PPh 21
   includeBpjsKesehatan: boolean;
   includeBpjsKetenagakerjaan: boolean;
   calculatePph21: boolean;
@@ -70,13 +76,16 @@ export interface CompanySalaryProfile {
   ptkpStatus: PtkpStatus;
   hasNpwp: boolean;
 
-  loanOrCashAdvance: number;
-  absenceDeduction: number;
-  cooperativeFee: number;
-  otherDeduction: number;
+  // Potongan Lain-lain
+  loanOrCashAdvance: number; // Kasbon / Pinjaman
+  absenceDeduction: number; // Potongan Keterlambatan / Alfa
+  cooperativeFee: number; // Iuran Koperasi / Duka
+  otherDeduction: number; // Potongan Lainnya
   deductionNotes?: string;
 
+  // Periode Cut-Off
   cutOffConfig: CompanyCutOffConfig;
+  notes?: string;
 }
 
 export interface SalaryInput {
@@ -90,46 +99,43 @@ export interface SalaryInput {
   ptkpStatus: PtkpStatus;
   hasNpwp: boolean;
 
-  // Basis Penggajian & Kehadiran (Working Days & Daily Rate)
-  salaryBasis: SalaryBasis; // 'monthly' (Bulanan) atau 'daily' (Harian / Daily Rate)
-  dailyRate: number; // Tarif Upah per Hari Masuk (untuk mode 'daily')
-  standardWorkingDays: number; // Hari kerja standar dalam sebulan (default: 21 atau 22)
-  actualWorkingDays: number; // Berapa hari masuk kerja bulan ini (dari kalkulasi kalender)
-  halfDaysCount?: number; // Jumlah hari setengah hari (dihitung 0.5)
-  leaveDaysCount?: number; // Jumlah cuti / izin
-  offDaysCount?: number; // Jumlah hari libur
-  isProratedMonthly?: boolean; // Jika bulanan, apakah gaji pokok dihitung prorata sesuai hari masuk
-  isDailyTransport?: boolean; // Hitung uang makan & transport otomatis per hari masuk
-  dailyTransportRate?: number; // Tarif transport & makan per hari hadir
+  // Komponen Pokok + Daily Rate & Kehadiran
+  baseSalary: number; // Gaji Pokok Bulanan
+  dailyRate: number; // Tarif Upah per Hari Masuk
+  standardWorkingDays: number; // Hari kerja standar
+  actualWorkingDays: number; // Berapa hari masuk kerja bulan ini (dari kalender / input)
+  halfDaysCount?: number;
+  leaveDaysCount?: number;
+  offDaysCount?: number;
+  isProratedBaseSalary?: boolean;
+  isDailyTransport?: boolean;
+  dailyTransportRate?: number;
 
   // Cut-off period details
   cutOffStartDate?: string;
   cutOffEndDate?: string;
   cutOffDay?: number;
 
-  // Penghasilan (Earnings)
-  baseSalary: number; // Gaji Pokok (jika bulanan) atau hasil perkalian daily rate
-  fixedAllowance: number; // Tunjangan Tetap (Jabatan, dll)
-  transportAllowance: number; // Tunjangan Transport / Makan
-  otherAllowance: number; // Tunjangan Lainnya
-  overtimeHours: number; // Jam Lembur
-  overtimeRatePerHour: number; // Tarif lembur per jam (otomatis atau kustom)
-  bonusOrThr: number; // Bonus / THR / Insentif
+  // Tunjangan & Lembur
+  fixedAllowance: number;
+  transportAllowance: number;
+  otherAllowance: number;
+  overtimeHours: number;
+  overtimeRatePerHour: number;
+  bonusOrThr: number;
 
-  // BPJS & Asuransi Ketenagakerjaan
-  includeBpjsKesehatan: boolean; // 1% Pekerja, 4% Perusahaan
-  includeBpjsKetenagakerjaan: boolean; // JHT (2% Pekerja, 3.7% Perusahaan), JP (1% Pekerja, 2% Perusahaan), JKK (0.24%), JKM (0.3%)
-  customBpjsSalaryCap?: number; // Default cap BPJS Kesehatan Rp 12.000.000, BPJS JP Rp 10.042.300
-  
-  // Pajak PPh 21
+  // BPJS & Pajak
+  includeBpjsKesehatan: boolean;
+  includeBpjsKetenagakerjaan: boolean;
+  customBpjsSalaryCap?: number;
   calculatePph21: boolean;
-  taxMethod: 'gross' | 'gross_up' | 'nett'; // Gross (karyawan bayar), Gross-up (tunjangan pajak), Nett (perusahaan tanggung)
+  taxMethod: 'gross' | 'gross_up' | 'nett';
 
-  // Potongan Lain-lain (Deductions)
-  loanOrCashAdvance: number; // Kasbon / Pinjaman Karyawan
-  absenceDeduction: number; // Potongan Ketidakhadiran / Terlambat
-  cooperativeFee: number; // Iuran Koperasi / Duka
-  otherDeduction: number; // Potongan Lainnya
+  // Potongan
+  loanOrCashAdvance: number;
+  absenceDeduction: number;
+  cooperativeFee: number;
+  otherDeduction: number;
   deductionNotes?: string;
 }
 
@@ -167,13 +173,16 @@ export interface SalaryCalculationResult {
   createdAt: string;
   input: SalaryInput;
 
-  // Summary
-  computedBaseSalary: number; // Gaji pokok aktual (bisa dari bulanan atau dailyRate * actualWorkingDays)
+  // Summary Komponen Pokok + Daily Rate
+  computedBaseSalary: number; // Gaji Pokok (baseSalary atau prorata)
+  computedDailyPay: number; // Upah Harian = dailyRate * actualWorkingDays
+  totalBasicIncome: number; // Gaji Pokok + Upah Harian (computedBaseSalary + computedDailyPay)
+
   computedTransportAllowance: number; // Tunjangan transport aktual (bisa fix atau dailyTransportRate * actualWorkingDays)
-  effectiveDailyRate: number; // Nilai tarif harian efektif
+  effectiveDailyRate: number; // Nilai tarif harian
   actualWorkingDays: number; // Jumlah hari masuk
   standardWorkingDays: number; // Jumlah hari kerja standar
-  grossSalary: number; // Total Penghasilan Bruto (Gaji Pokok + Tunjangan + Lembur + Bonus)
+  grossSalary: number; // Total Penghasilan Bruto (Gaji Pokok + Daily Pay + Tunjangan + Lembur + Bonus)
   totalAllowances: number;
   overtimePay: number;
   

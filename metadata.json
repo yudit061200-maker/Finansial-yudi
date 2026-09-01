@@ -1,6 +1,6 @@
 {
   "name": "ArthaSmart - AI Personal Finance & Bank Sync",
-  "description": "Aplikasi manajemen keuangan pribadi cerdas dengan kalender schedule masuk & libur 2 perusahaan, tanggal cut-off tutup penghitungan gaji, payroll bulanan & daily rate harian, PPh 21 TER, BPJS, AI Chat, OCR struk belanja, dan dashboard komplit.",
+  "description": "Aplikasi manajemen keuangan pribadi cerdas dengan kalender schedule masuk & libur kerja multi-perusahaan, tanggal cut-off tutup penghitungan gaji, sistem penggajian Gaji Pokok + Daily Rate, tambah & edit data gaji perusahaan, PPh 21 TER, BPJS, AI Chat, OCR struk belanja, dan dashboard komplit.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -246,24 +246,26 @@ export function calculateCompanyScheduleAttendance(
 /**
  * Default Profile untuk 2 Perusahaan
  */
+/**
+ * Default Initial Company Profiles (Gaji Pokok + Daily Rate)
+ */
 export const DEFAULT_COMPANY_A_PROFILE: CompanySalaryProfile = {
   id: 'company_a',
   companyName: 'PT Teknologi Nusantara (Pekerjaan Utama)',
   jobTitle: 'Senior Software Engineer / Lead',
   badgeColor: 'indigo',
   employmentType: 'permanent',
-  salaryBasis: 'monthly',
-  baseSalary: 14500000,
-  dailyRate: 659000,
+  baseSalary: 12000000, // Gaji Pokok Bulanan
+  dailyRate: 150000, // Daily Rate Upah Harian per Kehadiran
   standardWorkingDays: 22,
-  isProratedMonthly: false,
-  isDailyTransport: false,
-  dailyTransportRate: 50000,
-  fixedAllowance: 2500000,
-  transportAllowance: 1200000,
+  isProratedBaseSalary: false,
+  isDailyTransport: true,
+  dailyTransportRate: 50000, // Uang transport/makan per hari hadir
+  fixedAllowance: 2000000, // Tunjangan Tetap / Jabatan
+  transportAllowance: 0,
   otherAllowance: 500000,
   overtimeHours: 0,
-  overtimeRatePerHour: 98000,
+  overtimeRatePerHour: 0, // 0 = otomatis 1/173
   bonusOrThr: 0,
   includeBpjsKesehatan: true,
   includeBpjsKetenagakerjaan: true,
@@ -279,23 +281,23 @@ export const DEFAULT_COMPANY_A_PROFILE: CompanySalaryProfile = {
     cutOffDay: 20, // Tutup penghitungan tgl 20 (periode 21 bln lalu s.d 20 bln ini)
     payDay: 25,
   },
+  notes: 'Pekerjaan utama full-time WFO/Hybrid',
 };
 
 export const DEFAULT_COMPANY_B_PROFILE: CompanySalaryProfile = {
   id: 'company_b',
-  companyName: 'CV Digital Solusi Kreatif (Side Job / Harian)',
-  jobTitle: 'Consultant & Weekend Specialist',
+  companyName: 'CV Digital Solusi Kreatif (Side Job / Shift)',
+  jobTitle: 'Tech Consultant & Specialist',
   badgeColor: 'amber',
   employmentType: 'contract',
-  salaryBasis: 'daily', // Daily rate
-  baseSalary: 4500000,
-  dailyRate: 450000, // Rp 450.000 / hari
-  standardWorkingDays: 8, // Target 8 hari sebulan (weekend)
-  isProratedMonthly: false,
+  baseSalary: 2500000, // Base bulanan
+  dailyRate: 350000, // Rp 350.000 / hari masuk kerja
+  standardWorkingDays: 8, // Target 8 hari sebulan
+  isProratedBaseSalary: false,
   isDailyTransport: true,
-  dailyTransportRate: 40000, // Rp 40.000 / hari transport
+  dailyTransportRate: 35000,
   fixedAllowance: 0,
-  transportAllowance: 320000,
+  transportAllowance: 0,
   otherAllowance: 0,
   overtimeHours: 0,
   overtimeRatePerHour: 60000,
@@ -314,11 +316,102 @@ export const DEFAULT_COMPANY_B_PROFILE: CompanySalaryProfile = {
     cutOffDay: 25, // Tutup penghitungan tgl 25
     payDay: 28,
   },
+  notes: 'Sambilan akhir pekan & konsultasi berkala',
 };
 
+export const DEFAULT_COMPANIES: CompanySalaryProfile[] = [
+  DEFAULT_COMPANY_A_PROFILE,
+  DEFAULT_COMPANY_B_PROFILE,
+];
+
 /**
- * Status Metadata Helper
+ * Color badge utility
  */
+export const BADGE_COLOR_MAP: Record<
+  string,
+  {
+    bg: string;
+    text: string;
+    border: string;
+    pill: string;
+    dot: string;
+    ring: string;
+  }
+> = {
+  indigo: {
+    bg: 'bg-indigo-50 dark:bg-indigo-950/50',
+    text: 'text-indigo-700 dark:text-indigo-300',
+    border: 'border-indigo-200 dark:border-indigo-800',
+    pill: 'bg-indigo-600 text-white',
+    dot: 'bg-indigo-500',
+    ring: 'focus:ring-indigo-500',
+  },
+  emerald: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/50',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    border: 'border-emerald-200 dark:border-emerald-800',
+    pill: 'bg-emerald-600 text-white',
+    dot: 'bg-emerald-500',
+    ring: 'focus:ring-emerald-500',
+  },
+  amber: {
+    bg: 'bg-amber-50 dark:bg-amber-950/50',
+    text: 'text-amber-700 dark:text-amber-300',
+    border: 'border-amber-200 dark:border-amber-800',
+    pill: 'bg-amber-500 text-slate-900 font-bold',
+    dot: 'bg-amber-500',
+    ring: 'focus:ring-amber-500',
+  },
+  cyan: {
+    bg: 'bg-cyan-50 dark:bg-cyan-950/50',
+    text: 'text-cyan-700 dark:text-cyan-300',
+    border: 'border-cyan-200 dark:border-cyan-800',
+    pill: 'bg-cyan-600 text-white',
+    dot: 'bg-cyan-500',
+    ring: 'focus:ring-cyan-500',
+  },
+  purple: {
+    bg: 'bg-purple-50 dark:bg-purple-950/50',
+    text: 'text-purple-700 dark:text-purple-300',
+    border: 'border-purple-200 dark:border-purple-800',
+    pill: 'bg-purple-600 text-white',
+    dot: 'bg-purple-500',
+    ring: 'focus:ring-purple-500',
+  },
+  rose: {
+    bg: 'bg-rose-50 dark:bg-rose-950/50',
+    text: 'text-rose-700 dark:text-rose-300',
+    border: 'border-rose-200 dark:border-rose-800',
+    pill: 'bg-rose-600 text-white',
+    dot: 'bg-rose-500',
+    ring: 'focus:ring-rose-500',
+  },
+  blue: {
+    bg: 'bg-blue-50 dark:bg-blue-950/50',
+    text: 'text-blue-700 dark:text-blue-300',
+    border: 'border-blue-200 dark:border-blue-800',
+    pill: 'bg-blue-600 text-white',
+    dot: 'bg-blue-500',
+    ring: 'focus:ring-blue-500',
+  },
+  teal: {
+    bg: 'bg-teal-50 dark:bg-teal-950/50',
+    text: 'text-teal-700 dark:text-teal-300',
+    border: 'border-teal-200 dark:border-teal-800',
+    pill: 'bg-teal-600 text-white',
+    dot: 'bg-teal-500',
+    ring: 'focus:ring-teal-500',
+  },
+  orange: {
+    bg: 'bg-orange-50 dark:bg-orange-950/50',
+    text: 'text-orange-700 dark:text-orange-300',
+    border: 'border-orange-200 dark:border-orange-800',
+    pill: 'bg-orange-600 text-white',
+    dot: 'bg-orange-500',
+    ring: 'focus:ring-orange-500',
+  },
+};
+
 export const WORK_STATUS_META: Record<
   WorkStatus,
   {

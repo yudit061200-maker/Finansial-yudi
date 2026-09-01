@@ -336,33 +336,27 @@ export function calculatePph21Ter(
 
 /**
  * Kalkulator Lengkap Penghitungan Gaji (Payroll & Take Home Pay Calculator)
- * Mendukung Gaji Bulanan Tetap, Gaji Harian (Daily Rate), dan Prorata Kehadiran
+ * Menggunakan Sistem: Gaji Pokok + Daily Rate (Upah Harian * Hari Masuk Aktual)
  */
 export function calculateSalary(input: SalaryInput): SalaryCalculationResult {
   const standardWorkingDays = input.standardWorkingDays > 0 ? input.standardWorkingDays : 21;
   const actualWorkingDays = input.actualWorkingDays >= 0 ? input.actualWorkingDays : standardWorkingDays;
 
-  // 1. Hitung Gaji Pokok Berdasarkan Mode (Monthly vs Daily Rate)
-  let computedBaseSalary = 0;
-  let effectiveDailyRate = 0;
-
-  if (input.salaryBasis === 'daily') {
-    // Mode Harian (Daily Rate x Hari Masuk Kerja)
-    effectiveDailyRate = input.dailyRate || 0;
-    computedBaseSalary = Math.round(effectiveDailyRate * actualWorkingDays);
-  } else {
-    // Mode Bulanan
-    const rawBase = input.baseSalary || 0;
-    effectiveDailyRate = standardWorkingDays > 0 ? Math.round(rawBase / standardWorkingDays) : 0;
-    
-    if (input.isProratedMonthly && standardWorkingDays > 0) {
-      computedBaseSalary = Math.round((rawBase / standardWorkingDays) * actualWorkingDays);
-    } else {
-      computedBaseSalary = rawBase;
-    }
+  // 1. Hitung Gaji Pokok & Upah Harian (Daily Rate)
+  const rawBase = input.baseSalary || 0;
+  let computedBaseSalary = rawBase;
+  if (input.isProratedBaseSalary && standardWorkingDays > 0) {
+    computedBaseSalary = Math.round((rawBase / standardWorkingDays) * actualWorkingDays);
   }
 
-  // 2. Hitung Tunjangan Transport / Makan (Apakah Berbasis Harian atau Tetap)
+  // Upah Harian (Daily Rate x Hari Masuk Kerja)
+  const effectiveDailyRate = input.dailyRate || 0;
+  const computedDailyPay = Math.round(effectiveDailyRate * actualWorkingDays);
+
+  // Total Komponen Penghasilan Pokok (Gaji Pokok + Upah Harian)
+  const totalBasicIncome = computedBaseSalary + computedDailyPay;
+
+  // 2. Hitung Tunjangan Transport / Makan (Apakah Berbasis Harian atau Flat Tetap)
   let computedTransportAllowance = 0;
   if (input.isDailyTransport) {
     computedTransportAllowance = Math.round((input.dailyTransportRate || 0) * actualWorkingDays);
@@ -371,10 +365,10 @@ export function calculateSalary(input: SalaryInput): SalaryCalculationResult {
   }
 
   // 3. Hitung Lembur (Overtime Pay)
-  // Rumus standar Depnaker tarif lembur per jam = 1/173 * (Gaji Pokok + Tunjangan Tetap) jika tidak diset manual
+  // Rumus standar Depnaker tarif lembur per jam = 1/173 * (Gaji Pokok + Upah Pokok Harian + Tunjangan Tetap) jika tidak diset manual
   let hourlyRate = input.overtimeRatePerHour;
   if (!hourlyRate || hourlyRate <= 0) {
-    const basicSum = computedBaseSalary + (input.fixedAllowance || 0);
+    const basicSum = totalBasicIncome + (input.fixedAllowance || 0);
     hourlyRate = Math.round(basicSum / 173);
   }
   const overtimePay = Math.round((input.overtimeHours || 0) * hourlyRate);
@@ -387,14 +381,14 @@ export function calculateSalary(input: SalaryInput): SalaryCalculationResult {
 
   // 5. Penghasilan Bruto (Gross Income)
   const grossSalary =
-    computedBaseSalary +
+    totalBasicIncome +
     totalAllowances +
     overtimePay +
     (input.bonusOrThr || 0);
 
-  // 6. Perhitungan BPJS
+  // 6. Perhitungan BPJS (Dihitung dari Komponen Pokok + Tunjangan Tetap)
   const bpjs = calculateBpjs(
-    computedBaseSalary,
+    totalBasicIncome,
     input.fixedAllowance || 0,
     input.includeBpjsKesehatan,
     input.includeBpjsKetenagakerjaan
@@ -452,6 +446,8 @@ export function calculateSalary(input: SalaryInput): SalaryCalculationResult {
     createdAt: new Date().toISOString(),
     input,
     computedBaseSalary,
+    computedDailyPay,
+    totalBasicIncome,
     computedTransportAllowance,
     effectiveDailyRate,
     actualWorkingDays,
