@@ -177,7 +177,7 @@ export function calculateCompanyScheduleAttendance(
   scheduleDaysMap: Record<string, WorkScheduleDay>,
   dateList: string[]
 ): {
-  actualWorkingDays: number; // Hari kerja penuh + (0.5 * setengah hari)
+  actualWorkingDays: number; // Jumlah hari masuk kerja
   fullWorkDays: number;
   halfDays: number;
   offDays: number;
@@ -186,10 +186,7 @@ export function calculateCompanyScheduleAttendance(
   overtimeHours: number;
 } {
   let fullWorkDays = 0;
-  let halfDays = 0;
   let offDays = 0;
-  let leaveDays = 0;
-  let sickDays = 0;
   let overtimeHours = 0;
 
   for (const dateStr of dateList) {
@@ -209,36 +206,23 @@ export function calculateCompanyScheduleAttendance(
     const assignment = day.assignments[companyId];
     overtimeHours += assignment.overtimeHours || 0;
 
-    switch (assignment.status) {
-      case 'work':
-      case 'overtime':
-        fullWorkDays++;
-        break;
-      case 'half_day':
-        halfDays++;
-        break;
-      case 'leave':
-        leaveDays++;
-        break;
-      case 'sick':
-        sickDays++;
-        break;
-      case 'off':
-      default:
-        offDays++;
-        break;
+    // Sistem absensi disederhanakan: Kerja atau Libur
+    if (assignment.status === 'work' || assignment.status === 'overtime' || assignment.status === 'half_day') {
+      fullWorkDays++;
+    } else {
+      offDays++;
     }
   }
 
-  const actualWorkingDays = fullWorkDays + halfDays * 0.5;
+  const actualWorkingDays = fullWorkDays;
 
   return {
     actualWorkingDays,
     fullWorkDays,
-    halfDays,
+    halfDays: 0,
     offDays,
-    leaveDays,
-    sickDays,
+    leaveDays: 0,
+    sickDays: 0,
     overtimeHours,
   };
 }
@@ -424,51 +408,52 @@ export const WORK_STATUS_META: Record<
   }
 > = {
   work: {
-    label: 'Masuk Kerja (Full Day)',
+    label: 'Masuk Kerja',
     shortLabel: 'Kerja',
     bgColor: 'bg-emerald-50 dark:bg-emerald-950/50',
     textColor: 'text-emerald-700 dark:text-emerald-300',
     borderColor: 'border-emerald-200 dark:border-emerald-800',
     dotColor: 'bg-emerald-500',
   },
-  half_day: {
-    label: 'Setengah Hari (0.5 Hari)',
-    shortLabel: '1/2 Hari',
-    bgColor: 'bg-teal-50 dark:bg-teal-950/50',
-    textColor: 'text-teal-700 dark:text-teal-300',
-    borderColor: 'border-teal-200 dark:border-teal-800',
-    dotColor: 'bg-teal-500',
-  },
   off: {
-    label: 'Libur (Day Off)',
+    label: 'Libur',
     shortLabel: 'Libur',
     bgColor: 'bg-slate-100 dark:bg-slate-800',
     textColor: 'text-slate-500 dark:text-slate-400',
     borderColor: 'border-slate-200 dark:border-slate-700',
     dotColor: 'bg-slate-400',
   },
+  // Fallbacks for legacy state compatibility
+  half_day: {
+    label: 'Masuk Kerja',
+    shortLabel: 'Kerja',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950/50',
+    textColor: 'text-emerald-700 dark:text-emerald-300',
+    borderColor: 'border-emerald-200 dark:border-emerald-800',
+    dotColor: 'bg-emerald-500',
+  },
   leave: {
-    label: 'Cuti / Izin',
-    shortLabel: 'Cuti',
-    bgColor: 'bg-sky-50 dark:bg-sky-950/50',
-    textColor: 'text-sky-700 dark:text-sky-300',
-    borderColor: 'border-sky-200 dark:border-sky-800',
-    dotColor: 'bg-sky-500',
+    label: 'Libur',
+    shortLabel: 'Libur',
+    bgColor: 'bg-slate-100 dark:bg-slate-800',
+    textColor: 'text-slate-500 dark:text-slate-400',
+    borderColor: 'border-slate-200 dark:border-slate-700',
+    dotColor: 'bg-slate-400',
   },
   sick: {
-    label: 'Sakit (Surat Dokter)',
-    shortLabel: 'Sakit',
-    bgColor: 'bg-rose-50 dark:bg-rose-950/50',
-    textColor: 'text-rose-700 dark:text-rose-300',
-    borderColor: 'border-rose-200 dark:border-rose-800',
-    dotColor: 'bg-rose-500',
+    label: 'Libur',
+    shortLabel: 'Libur',
+    bgColor: 'bg-slate-100 dark:bg-slate-800',
+    textColor: 'text-slate-500 dark:text-slate-400',
+    borderColor: 'border-slate-200 dark:border-slate-700',
+    dotColor: 'bg-slate-400',
   },
   overtime: {
-    label: 'Lembur / Shift Tambahan',
-    shortLabel: 'Lembur',
-    bgColor: 'bg-amber-50 dark:bg-amber-950/50',
-    textColor: 'text-amber-700 dark:text-amber-300',
-    borderColor: 'border-amber-200 dark:border-amber-800',
-    dotColor: 'bg-amber-500',
+    label: 'Masuk Kerja',
+    shortLabel: 'Kerja',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950/50',
+    textColor: 'text-emerald-700 dark:text-emerald-300',
+    borderColor: 'border-emerald-200 dark:border-emerald-800',
+    dotColor: 'bg-emerald-500',
   },
 };

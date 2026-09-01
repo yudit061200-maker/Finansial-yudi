@@ -613,16 +613,32 @@ export const CompanySalaryModal: React.FC<CompanySalaryModalProps> = ({
                           cutOffConfig: { ...formData.cutOffConfig, cutOffDay: Number(e.target.value) },
                         })
                       }
-                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
                     >
+                      <option value="15">Tanggal 15 (Periode 16 bln lalu s.d 15 bln ini) ⭐</option>
                       <option value="20">Tanggal 20 (Periode 21 bln lalu s.d 20 bln ini)</option>
                       <option value="25">Tanggal 25 (Periode 26 bln lalu s.d 25 bln ini)</option>
                       <option value="28">Tanggal 28 (Periode 29 bln lalu s.d 28 bln ini)</option>
+                      <option value="10">Tanggal 10 (Periode 11 bln lalu s.d 10 bln ini)</option>
                       <option value="31">Akhir Bulan (1 s.d Akhir Bulan Penuh)</option>
                     </select>
-                    <p className="text-[11px] text-slate-500">
-                      Kehadiran dari kalender akan dihitung otomatis sesuai rentang cut-off ini.
-                    </p>
+                    <div className="p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-900/50 text-[11px] text-indigo-900 dark:text-indigo-200 space-y-1">
+                      <div className="font-semibold flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>
+                          {formData.cutOffConfig.cutOffDay >= 31
+                            ? 'Periode Cut-Off: Tanggal 1 s.d Akhir Bulan'
+                            : `Periode Cut-Off: Tanggal ${formData.cutOffConfig.cutOffDay + 1} s.d ${formData.cutOffConfig.cutOffDay} setiap bulan`}
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                        {formData.cutOffConfig.cutOffDay === 15
+                          ? 'Presensi & lembur dihitung dari tanggal 16 bulan sebelumnya sampai tanggal 15 bulan penggajian.'
+                          : formData.cutOffConfig.cutOffDay >= 31
+                          ? 'Presensi dihitung dari tanggal 1 sampai akhir bulan kalender penuh.'
+                          : `Presensi & lembur dihitung dari tanggal ${formData.cutOffConfig.cutOffDay + 1} bulan sebelumnya sampai tanggal ${formData.cutOffConfig.cutOffDay} bulan berjalan.`}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
@@ -631,7 +647,7 @@ export const CompanySalaryModal: React.FC<CompanySalaryModalProps> = ({
                     </label>
                     <select
                       id="select-pay-day"
-                      value={formData.cutOffConfig.payDay || 25}
+                      value={formData.cutOffConfig.payDay || (formData.cutOffConfig.cutOffDay === 15 ? 20 : 25)}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
@@ -640,12 +656,17 @@ export const CompanySalaryModal: React.FC<CompanySalaryModalProps> = ({
                       }
                       className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                     >
+                      <option value="20">Tanggal 20 tiap bulan (Cocok cut-off 15)</option>
                       <option value="25">Tanggal 25 tiap bulan</option>
                       <option value="28">Tanggal 28 tiap bulan</option>
                       <option value="30">Tanggal 30 / Akhir bulan</option>
                       <option value="1">Tanggal 1 bulan berikutnya</option>
                       <option value="5">Tanggal 5 bulan berikutnya</option>
+                      <option value="10">Tanggal 10 bulan berikutnya</option>
                     </select>
+                    <p className="text-[11px] text-slate-500">
+                      Tanggal estimasi pencairan transfer gaji bulanan.
+                    </p>
                   </div>
                 </div>
               </div>

@@ -149,10 +149,7 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
   const calculateAttendance = (company: CompanySalaryProfile) => {
     const cutOff = getCutOffDateRange(year, month, company.cutOffConfig.cutOffDay);
     let fullWorkDays = 0;
-    let halfDays = 0;
     let offDays = 0;
-    let leaveDays = 0;
-    let sickDays = 0;
     let overtimeHours = 0;
 
     for (const dStr of cutOff.dateList) {
@@ -161,35 +158,21 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
       const assignment = dayData.assignments[company.id] || { status: 'off', overtimeHours: 0 };
 
       overtimeHours += assignment.overtimeHours || 0;
-      switch (assignment.status) {
-        case 'work':
-        case 'overtime':
-          fullWorkDays++;
-          break;
-        case 'half_day':
-          halfDays++;
-          break;
-        case 'leave':
-          leaveDays++;
-          break;
-        case 'sick':
-          sickDays++;
-          break;
-        case 'off':
-        default:
-          offDays++;
-          break;
+      if (assignment.status === 'work' || assignment.status === 'overtime' || assignment.status === 'half_day') {
+        fullWorkDays++;
+      } else {
+        offDays++;
       }
     }
 
-    const actualWorkingDays = fullWorkDays + halfDays * 0.5;
+    const actualWorkingDays = fullWorkDays;
     return {
       actualWorkingDays,
       fullWorkDays,
-      halfDays,
+      halfDays: 0,
       offDays,
-      leaveDays,
-      sickDays,
+      leaveDays: 0,
+      sickDays: 0,
       overtimeHours,
       cutOff,
     };
@@ -216,27 +199,19 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
         }
 
         if (pattern === 'senin_jumat') {
-          if (idx === 0) {
-            newAssignments[comp.id] = {
-              status: isWeekend || isHoliday ? 'off' : 'work',
-              shiftName: isWeekend ? 'Libur' : 'Office',
-              overtimeHours: 0,
-            };
-          } else {
-            newAssignments[comp.id] = {
-              status: isWeekend ? 'work' : 'off',
-              shiftName: isWeekend ? 'Weekend Project' : 'Off',
-              overtimeHours: 0,
-            };
-          }
+          newAssignments[comp.id] = {
+            status: isWeekend || isHoliday ? 'off' : 'work',
+            shiftName: isWeekend || isHoliday ? 'Libur' : 'Kerja',
+            overtimeHours: 0,
+          };
         } else if (pattern === 'weekend_shift') {
           newAssignments[comp.id] = {
             status: isWeekend ? 'work' : 'off',
-            shiftName: isWeekend ? 'Weekend Shift' : 'Off',
+            shiftName: isWeekend ? 'Kerja Weekend' : 'Libur',
             overtimeHours: 0,
           };
         } else if (pattern === 'all_work') {
-          newAssignments[comp.id] = { status: 'work', shiftName: 'Masuk', overtimeHours: 0 };
+          newAssignments[comp.id] = { status: 'work', shiftName: 'Kerja', overtimeHours: 0 };
         } else if (pattern === 'all_off') {
           newAssignments[comp.id] = { status: 'off', shiftName: 'Libur', overtimeHours: 0 };
         }
@@ -251,16 +226,14 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
     onBatchUpdateSchedules(newUpdates);
   };
 
-  // Quick toggle status for a specific company
+  // Quick toggle status for a specific company: Toggle between 'work' and 'off'
   const handleQuickToggle = (dateStr: string, companyId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const parts = dateStr.split('-').map(Number);
     const day = getDaySchedule(dateStr, parts[2], parts[1], parts[0]);
     const currAssignment = day.assignments[companyId] || { status: 'off', overtimeHours: 0 };
 
-    const cycleOrder: WorkStatus[] = ['work', 'half_day', 'overtime', 'leave', 'sick', 'off'];
-    const currIndex = cycleOrder.indexOf(currAssignment.status);
-    const nextStatus = cycleOrder[(currIndex + 1) % cycleOrder.length];
+    const nextStatus: WorkStatus = currAssignment.status === 'work' ? 'off' : 'work';
 
     const updated: WorkScheduleDay = {
       ...day,
@@ -269,7 +242,7 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
         [companyId]: {
           ...currAssignment,
           status: nextStatus,
-          shiftName: nextStatus === 'work' ? 'Masuk' : nextStatus === 'half_day' ? '1/2 Hari' : nextStatus === 'off' ? 'Libur' : nextStatus,
+          shiftName: nextStatus === 'work' ? 'Kerja' : 'Libur',
         },
       },
     };
@@ -304,7 +277,7 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Klik tanggal untuk atur kehadiran kerja, setengah hari, cuti, libur, dan jam lembur.
+                  Klik tanggal untuk atur kehadiran kerja, libur, dan jam lembur.
                 </p>
               </div>
             </div>
@@ -491,9 +464,13 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
               {/* Cut-Off Cycle Badge */}
               <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 mb-3 text-xs space-y-1">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-500 dark:text-slate-400">Siklus Cut-Off:</span>
+                  <span className="text-slate-500 dark:text-slate-400">Siklus Tutup Buku:</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200 font-mono">
-                    Tgl {comp.cutOffConfig.cutOffDay}
+                    {comp.cutOffConfig.cutOffDay === 15
+                      ? 'Tgl 15 (Periode 16–15)'
+                      : comp.cutOffConfig.cutOffDay >= 31
+                      ? 'Akhir Bulan (1–Akhir)'
+                      : `Tgl ${comp.cutOffConfig.cutOffDay} (Periode ${comp.cutOffConfig.cutOffDay + 1}–${comp.cutOffConfig.cutOffDay})`}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-[11px] font-mono">
@@ -505,28 +482,22 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
               </div>
 
               {/* Attendance Breakdown Grid */}
-              <div className="grid grid-cols-4 gap-1.5 text-center mb-3">
-                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-medium">Masuk</span>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 font-mono">
+              <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-medium">Hari Kerja</span>
+                  <span className="text-base font-bold text-emerald-700 dark:text-emerald-300 font-mono">
                     {stats.actualWorkingDays}
                   </span>
                 </div>
-                <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                  <span className="text-[10px] text-slate-500 block font-medium">Libur</span>
-                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300 font-mono">
+                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-500 block font-medium">Hari Libur</span>
+                  <span className="text-base font-bold text-slate-700 dark:text-slate-300 font-mono">
                     {stats.offDays}
                   </span>
                 </div>
-                <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60">
-                  <span className="text-[10px] text-sky-600 dark:text-sky-400 block font-medium">Cuti/Sakit</span>
-                  <span className="text-sm font-bold text-sky-700 dark:text-sky-300 font-mono">
-                    {stats.leaveDays + stats.sickDays}
-                  </span>
-                </div>
-                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60">
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60">
                   <span className="text-[10px] text-amber-600 dark:text-amber-400 block font-medium">Lembur</span>
-                  <span className="text-sm font-bold text-amber-700 dark:text-amber-300 font-mono">
+                  <span className="text-base font-bold text-amber-700 dark:text-amber-300 font-mono">
                     {stats.overtimeHours}j
                   </span>
                 </div>
@@ -550,19 +521,18 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold text-slate-700 dark:text-slate-300">Status Kehadiran:</span>
-            {(['work', 'half_day', 'overtime', 'leave', 'sick', 'off'] as WorkStatus[]).map((st) => {
-              const meta = WORK_STATUS_META[st];
-              return (
-                <div key={st} className="flex items-center gap-1.5">
-                  <span className={`w-2.5 h-2.5 rounded-full ${meta.dotColor}`}></span>
-                  <span className="text-slate-600 dark:text-slate-400 text-[11px]">{meta.shortLabel}</span>
-                </div>
-              );
-            })}
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span className="text-slate-700 dark:text-slate-300 font-medium text-[11px]">Kerja (Masuk)</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+              <span className="text-slate-600 dark:text-slate-400 text-[11px]">Libur (Off)</span>
+            </div>
           </div>
 
           <div className="text-[11px] text-slate-400">
-            Tip: <strong>Klik badge</strong> untuk ganti status cepat, atau <strong>klik kartu tanggal</strong> untuk rincian shift.
+            Tip: <strong>Klik badge</strong> untuk ganti status Kerja/Libur cepat, atau <strong>klik kartu tanggal</strong> untuk atur jam lembur & catatan.
           </div>
         </div>
 
@@ -729,40 +699,60 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
 
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                        Status Kehadiran Hari Ini:
+                        Status Presensi Hari Ini:
                       </label>
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                        {(['work', 'half_day', 'overtime', 'leave', 'sick', 'off'] as WorkStatus[]).map((st) => {
-                          const meta = WORK_STATUS_META[st];
-                          const isCur = assignment.status === st;
-                          return (
-                            <button
-                              key={st}
-                              type="button"
-                              onClick={() => {
-                                const updated: WorkScheduleDay = {
-                                  ...selectedDayData,
-                                  assignments: {
-                                    ...selectedDayData.assignments,
-                                    [comp.id]: {
-                                      ...assignment,
-                                      status: st,
-                                      shiftName: st === 'work' ? 'Masuk' : st === 'half_day' ? '1/2 Hari' : st === 'off' ? 'Libur' : st,
-                                    },
-                                  },
-                                };
-                                onUpdateScheduleDay(selectedDate, updated);
-                              }}
-                              className={`px-2 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer text-center ${
-                                isCur
-                                  ? `${compColor.pill} shadow-xs`
-                                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400'
-                              }`}
-                            >
-                              {meta.shortLabel}
-                            </button>
-                          );
-                        })}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated: WorkScheduleDay = {
+                              ...selectedDayData,
+                              assignments: {
+                                ...selectedDayData.assignments,
+                                [comp.id]: {
+                                  ...assignment,
+                                  status: 'work',
+                                  shiftName: 'Kerja',
+                                },
+                              },
+                            };
+                            onUpdateScheduleDay(selectedDate, updated);
+                          }}
+                          className={`px-3 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                            assignment.status === 'work' || assignment.status === 'overtime' || assignment.status === 'half_day'
+                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-2 ring-emerald-500'
+                              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                          }`}
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                          <span>Kerja (Masuk)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated: WorkScheduleDay = {
+                              ...selectedDayData,
+                              assignments: {
+                                ...selectedDayData.assignments,
+                                [comp.id]: {
+                                  ...assignment,
+                                  status: 'off',
+                                  shiftName: 'Libur',
+                                },
+                              },
+                            };
+                            onUpdateScheduleDay(selectedDate, updated);
+                          }}
+                          className={`px-3 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                            assignment.status === 'off' || assignment.status === 'leave' || assignment.status === 'sick'
+                              ? 'bg-slate-800 dark:bg-slate-700 text-white shadow-md ring-2 ring-slate-400'
+                              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                          }`}
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                          <span>Libur (Off)</span>
+                        </button>
                       </div>
                     </div>
 

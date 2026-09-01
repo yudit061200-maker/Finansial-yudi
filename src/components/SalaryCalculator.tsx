@@ -743,9 +743,13 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-500">Siklus Cut-Off:</span>
-                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
-                          Tutup Tgl {profile.cutOffConfig.cutOffDay} ({cutOff.startDisplay} s.d {cutOff.endDisplay})
+                        <span className="text-slate-500">Siklus Tutup Buku:</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold text-[11px]">
+                          {profile.cutOffConfig.cutOffDay === 15
+                            ? `Tgl 15 (Periode 16–15: ${cutOff.startDisplay} s.d ${cutOff.endDisplay})`
+                            : profile.cutOffConfig.cutOffDay >= 31
+                            ? `Akhir Bulan (1 s.d Akhir: ${cutOff.startDisplay} s.d ${cutOff.endDisplay})`
+                            : `Tgl ${profile.cutOffConfig.cutOffDay} (Periode ${profile.cutOffConfig.cutOffDay + 1}–${profile.cutOffConfig.cutOffDay}: ${cutOff.startDisplay} s.d ${cutOff.endDisplay})`}
                         </span>
                       </div>
                       <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-700 font-semibold">
@@ -896,7 +900,11 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
                   <div className="space-y-0.5">
                     <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                       <CalendarCheck className="w-3.5 h-3.5 text-indigo-600" />
-                      Periode Cut-Off: Tgl {profile.cutOffConfig.cutOffDay} ({cutOff.startDisplay} – {cutOff.endDisplay})
+                      {profile.cutOffConfig.cutOffDay === 15
+                        ? `Siklus Tutup Buku: Tgl 15 (Periode 16–15: ${cutOff.startDisplay} – ${cutOff.endDisplay})`
+                        : profile.cutOffConfig.cutOffDay >= 31
+                        ? `Siklus Tutup Buku: Akhir Bulan (${cutOff.startDisplay} – ${cutOff.endDisplay})`
+                        : `Siklus Tutup Buku: Tgl ${profile.cutOffConfig.cutOffDay} (Periode ${profile.cutOffConfig.cutOffDay + 1}–${profile.cutOffConfig.cutOffDay}: ${cutOff.startDisplay} – ${cutOff.endDisplay})`}
                     </div>
                     <div className="text-[11px] text-slate-500">
                       Kehadiran dihitung otomatis dari kalender jadwal kerja.
