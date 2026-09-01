@@ -19,6 +19,7 @@ interface TransactionModalProps {
   editTransaction?: Transaction | null;
   accounts: Account[];
   defaultType?: TransactionType;
+  defaultDate?: string;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -28,6 +29,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   editTransaction,
   accounts,
   defaultType = 'expense',
+  defaultDate,
 }) => {
   const [type, setType] = useState<TransactionType>(defaultType);
   const [amount, setAmount] = useState('');
@@ -35,7 +37,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [category, setCategory] = useState('Makanan & Minuman');
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [destinationAccountId, setDestinationAccountId] = useState(accounts[1]?.id || '');
-  const [date, setDate] = useState(getTodayDateString());
+  const [date, setDate] = useState(defaultDate || getTodayDateString());
   const [notes, setNotes] = useState('');
   const [tagsInput, setTagsInput] = useState('');
 
@@ -57,11 +59,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setCategory(defaultType === 'income' ? 'Gaji & Upah' : defaultType === 'transfer' ? 'Transfer Antar Akun' : 'Makanan & Minuman');
       setAccountId(accounts[0]?.id || '');
       setDestinationAccountId(accounts[1]?.id || '');
-      setDate(getTodayDateString());
+      setDate(defaultDate || getTodayDateString());
       setNotes('');
       setTagsInput('');
     }
-  }, [editTransaction, isOpen, accounts, defaultType]);
+  }, [editTransaction, isOpen, accounts, defaultType, defaultDate]);
 
   if (!isOpen) return null;
 

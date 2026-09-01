@@ -13,7 +13,7 @@ import {
   WORK_STATUS_META,
   BADGE_COLOR_MAP,
 } from '../utils/scheduleHelper';
-import { formatRupiah } from '../utils/formatters';
+import { formatRupiah, getTodayDateString } from '../utils/formatters';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -507,12 +507,11 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
             const dObj = new Date(year, month - 1, dayNum);
             const isWeekend = dObj.getDay() === 0 || dObj.getDay() === 6;
             const isHoliday = !!dayData.holidayName;
-            const isToday =
-              new Date().toISOString().split('T')[0] === dateStr;
+            const isToday = getTodayDateString() === dateStr;
 
             return (
               <div
-                key={dateStr}
+                key={`ws-day-${dateStr}-${i}`}
                 id={`calendar-day-${dateStr}`}
                 onClick={() => setSelectedDate(dateStr)}
                 className={`min-h-[110px] p-2 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between group hover:border-indigo-400 dark:hover:border-indigo-500 ${

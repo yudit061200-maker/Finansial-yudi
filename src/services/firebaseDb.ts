@@ -134,7 +134,7 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
           batch.set(ref, cleanForFirestore(comp));
         });
         const settingRef = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
-        batch.set(settingRef, { id: 'general', employeeName: 'Yudit Hermawan', updatedAt: new Date().toISOString() });
+        batch.set(settingRef, { id: 'general', employeeName: 'Yuditira', updatedAt: new Date().toISOString() });
         await batch.commit();
       }
 
@@ -167,7 +167,7 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
           batch.set(ref, cleanForFirestore(comp));
         });
         const settingRef = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
-        batch.set(settingRef, { id: 'general', employeeName: 'Yudit Hermawan', updatedAt: new Date().toISOString() });
+        batch.set(settingRef, { id: 'general', employeeName: 'Yuditira', updatedAt: new Date().toISOString() });
         await batch.commit();
       }
 
@@ -210,7 +210,7 @@ export async function seedFirestoreIfEmpty(): Promise<void> {
     });
 
     const settingRef = doc(db, COLLECTIONS.SALARY_SETTINGS, 'general');
-    batch.set(settingRef, { id: 'general', employeeName: 'Yudit Hermawan', updatedAt: new Date().toISOString() });
+    batch.set(settingRef, { id: 'general', employeeName: 'Yuditira', updatedAt: new Date().toISOString() });
 
     const welcomeMsg: ChatMessage = {
       id: 'msg-welcome',
@@ -519,7 +519,6 @@ export function subscribeSalaryCompanies(onUpdate: (companies: CompanySalaryProf
     },
     (error) => {
       console.error('Firestore salary companies subscription error:', error);
-      handleFirestoreError(error, OperationType.GET, COLLECTIONS.SALARY_COMPANIES);
     }
   );
 }
@@ -542,7 +541,6 @@ export function subscribeWorkSchedules(onUpdate: (schedules: Record<string, Work
     },
     (error) => {
       console.error('Firestore work schedules subscription error:', error);
-      handleFirestoreError(error, OperationType.GET, COLLECTIONS.WORK_SCHEDULES);
     }
   );
 }
@@ -555,7 +553,7 @@ export function subscribeSalarySettings(onUpdate: (settings: { employeeName: str
       if (snap.exists()) {
         const data = snap.data();
         onUpdate({
-          employeeName: data.employeeName || 'Yudit Hermawan',
+          employeeName: data.employeeName || 'Yuditira',
         });
       }
     },

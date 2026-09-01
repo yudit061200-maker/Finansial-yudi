@@ -79,7 +79,7 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
   isPrivacyMode = false,
   onSaveSalaryToIncome,
 }) => {
-  const [employeeName, setEmployeeName] = useState('Yudit Hermawan');
+  const [employeeName, setEmployeeName] = useState('Yuditira');
   const [periodMonth, setPeriodMonth] = useState<number>(new Date().getMonth() + 1);
   const [periodYear, setPeriodYear] = useState<number>(new Date().getFullYear());
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(true);
@@ -124,9 +124,6 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
         try {
           localStorage.setItem(STORAGE_KEY_COMPANIES, JSON.stringify(cloudCompanies));
         } catch (e) {}
-      } else {
-        // If empty in cloud, push current default/local companies to Firestore
-        saveAllSalaryCompaniesToFirestore(companies);
       }
     });
 

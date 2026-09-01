@@ -410,7 +410,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
                 type="text"
                 value={accountHolder}
                 onChange={(e) => setAccountHolder(e.target.value)}
-                placeholder="Contoh: Yudit Hermawan"
+                placeholder="Contoh: Yuditira"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white"
               />
             </div>

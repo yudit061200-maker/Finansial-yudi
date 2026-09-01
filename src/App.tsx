@@ -90,6 +90,7 @@ export default function App() {
   // Modals & Active Selections
   const [isNewTxModalOpen, setIsNewTxModalOpen] = useState(false);
   const [newTxDefaultType, setNewTxDefaultType] = useState<'expense' | 'income' | 'transfer'>('expense');
+  const [newTxDefaultDate, setNewTxDefaultDate] = useState<string | undefined>(undefined);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedTransactionDetail, setSelectedTransactionDetail] = useState<Transaction | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -147,9 +148,14 @@ export default function App() {
   // Real-time Firestore synchronization on mount
   useEffect(() => {
     // Check and seed initial data once if this Firestore project is brand new
-    seedFirestoreIfEmpty().then(() => {
-      setIsDbLoaded(true);
-    });
+    seedFirestoreIfEmpty()
+      .then(() => {
+        setIsDbLoaded(true);
+      })
+      .catch((err) => {
+        console.warn('Firestore seed notice:', err);
+        setIsDbLoaded(true);
+      });
 
     const unsubAccounts = subscribeAccounts((items) => {
       setAccounts(items);
@@ -606,7 +612,12 @@ export default function App() {
               healthScore={healthScore}
               isPrivacyMode={isPrivacyMode}
               onNavigate={(tab) => setActiveTab(tab)}
-              onOpenNewTransaction={() => setIsNewTxModalOpen(true)}
+              onOpenNewTransaction={(date) => {
+                setEditingTransaction(null);
+                setNewTxDefaultDate(date);
+                setNewTxDefaultType('expense');
+                setIsNewTxModalOpen(true);
+              }}
               onSelectTransaction={(tx) => setSelectedTransactionDetail(tx)}
               onAddNewAccount={() => {
                 setEditingAccount(null);
@@ -784,6 +795,7 @@ export default function App() {
         onClose={() => {
           setIsNewTxModalOpen(false);
           setEditingTransaction(null);
+          setNewTxDefaultDate(undefined);
         }}
         onSave={(tx) => {
           if (editingTransaction) {
@@ -795,6 +807,7 @@ export default function App() {
         editTransaction={editingTransaction}
         accounts={accounts}
         defaultType={newTxDefaultType}
+        defaultDate={newTxDefaultDate}
       />
 
       {/* Transaction Details Modal */}

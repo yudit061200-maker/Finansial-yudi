@@ -11,6 +11,7 @@ import {
   formatRupiah,
   formatRupiahShort,
   formatDateIndo,
+  formatDateToYMD,
   isDebtPaid,
 } from '../utils/formatters';
 import { getCashSummary } from '../utils/cashflow';
@@ -41,6 +42,7 @@ import {
 } from 'lucide-react';
 import { NavTab } from './Header';
 import { ConfirmModal } from './ConfirmModal';
+import { CashForecastCalendar } from './CashForecastCalendar';
 
 interface DashboardProps {
   accounts: Account[];
@@ -51,7 +53,7 @@ interface DashboardProps {
   healthScore: FinancialHealthScore;
   isPrivacyMode?: boolean;
   onNavigate: (tab: NavTab) => void;
-  onOpenNewTransaction: () => void;
+  onOpenNewTransaction: (defaultDate?: string) => void;
   onSelectTransaction?: (tx: Transaction) => void;
   onAddNewAccount?: () => void;
   onEditAccount?: (account: Account) => void;
@@ -211,7 +213,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(today.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = formatDateToYMD(d);
       const dayNum = d.getDate();
       const monthShort = d.toLocaleString('id-ID', { month: 'short' });
       daysMap.set(dateStr, {
@@ -545,7 +547,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </button>
 
         <button
-          onClick={onOpenNewTransaction}
+          onClick={() => onOpenNewTransaction()}
           className="col-span-2 sm:col-span-1 fintech-card p-3.5 rounded-2xl flex items-center gap-3 text-left group cursor-pointer border-indigo-200/80 dark:border-indigo-800/80 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30"
         >
           <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform shadow-xs">
@@ -600,6 +602,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </button>
         </div>
       )}
+
+      {/* Kalender Perkiraan Sisa Kas (Aktual & Proyeksi Likuiditas) */}
+      <CashForecastCalendar
+        accounts={accounts}
+        transactions={transactions}
+        debts={debts}
+        budgets={budgets}
+        isPrivacyMode={isPrivacyMode}
+        onOpenNewTransaction={onOpenNewTransaction}
+        onSelectTransaction={onSelectTransaction}
+        onNavigateToDebts={() => onNavigate('debts')}
+      />
 
       {/* Main Dynamic Charts & Category Breakdown Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -750,7 +764,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                 return (
                   <g
-                    key={day.dateStr}
+                    key={`chart-day-${day.dateStr}-${idx}`}
                     onMouseEnter={() => setHoveredChartDay(day)}
                     onMouseLeave={() => setHoveredChartDay(null)}
                     className="cursor-pointer"

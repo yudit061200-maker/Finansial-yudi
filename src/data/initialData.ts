@@ -11,7 +11,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     currency: 'IDR',
     color: '#00529B',
     icon: 'Building2',
-    accountHolder: 'YUDIT HERMAWAN',
+    accountHolder: 'YUDITIRA',
   },
   {
     id: 'acc-mandiri',
@@ -23,7 +23,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     currency: 'IDR',
     color: '#003366',
     icon: 'Building2',
-    accountHolder: 'YUDIT HERMAWAN',
+    accountHolder: 'YUDITIRA',
   },
   {
     id: 'acc-gopay',
@@ -35,7 +35,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     currency: 'IDR',
     color: '#00AA13',
     icon: 'Smartphone',
-    accountHolder: 'Yudit H.',
+    accountHolder: 'Yuditira',
   },
   {
     id: 'acc-ovo',
@@ -47,7 +47,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     currency: 'IDR',
     color: '#4C2A86',
     icon: 'Smartphone',
-    accountHolder: 'Yudit H.',
+    accountHolder: 'Yuditira',
   },
   {
     id: 'acc-shopeepay',
@@ -59,7 +59,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     currency: 'IDR',
     color: '#EE4D2D',
     icon: 'Smartphone',
-    accountHolder: 'Yudit H.',
+    accountHolder: 'Yuditira',
   },
   {
     id: 'acc-bibit',
@@ -71,7 +71,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     currency: 'IDR',
     color: '#10B981',
     icon: 'TrendingUp',
-    accountHolder: 'Yudit Hermawan',
+    accountHolder: 'Yuditira',
   },
   {
     id: 'acc-cash',
@@ -83,7 +83,7 @@ export const INITIAL_ACCOUNTS: Account[] = [
     currency: 'IDR',
     color: '#F59E0B',
     icon: 'Banknote',
-    accountHolder: 'Yudit',
+    accountHolder: 'Yuditira',
   },
 ];
 
