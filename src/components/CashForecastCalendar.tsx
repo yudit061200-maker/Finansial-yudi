@@ -3,6 +3,7 @@ import {
   Account,
   Transaction,
   DebtRecord,
+  DebtPayment,
   Budget,
 } from '../types/finance';
 import {
@@ -32,6 +33,7 @@ import {
   Plus,
   X,
   ShieldCheck,
+  Check,
 } from 'lucide-react';
 
 interface CashForecastCalendarProps {
@@ -43,6 +45,21 @@ interface CashForecastCalendarProps {
   onOpenNewTransaction?: (defaultDate?: string) => void;
   onSelectTransaction?: (tx: Transaction) => void;
   onNavigateToDebts?: () => void;
+}
+
+export interface ScheduledDebtItem {
+  debt: DebtRecord;
+  title: string;
+  personName: string;
+  providerName?: string;
+  amount: number;
+  isInstallment: boolean;
+  monthNumber?: number;
+  tenorMonths?: number;
+  isPaid: boolean;
+  status: 'paid' | 'unpaid' | 'overdue';
+  paymentDate?: string;
+  paymentNotes?: string;
 }
 
 interface DayCashData {
@@ -61,11 +78,17 @@ interface DayCashData {
   actualExpense: number;
   actualNetFlow: number;
 
-  // Real scheduled debts / installments due on this day
-  duePayables: DebtRecord[];
-  dueReceivables: DebtRecord[];
-  duePayablesAmount: number;
-  dueReceivablesAmount: number;
+  // Real scheduled debts / installments due on this day (UNPAID)
+  duePayables: ScheduledDebtItem[];
+  dueReceivables: ScheduledDebtItem[];
+  duePayablesAmount: number; // Only unpaid due amounts
+  dueReceivablesAmount: number; // Only unpaid due amounts
+
+  // Debts / Installments that are ALREADY PAID for this month / date (PAS, no double counting)
+  paidPayables: ScheduledDebtItem[];
+  paidReceivables: ScheduledDebtItem[];
+  paidPayablesAmount: number;
+  paidReceivablesAmount: number;
 
   // Pure real daily net & running balance
   dayNetFlow: number;
@@ -135,7 +158,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     return d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
   }, [currentYear, currentMonth]);
 
-  // Build Calendar Matrix with 100% Real Actuals & Scheduled Installments (No Estimates/Burn Rate)
+  // Build Calendar Matrix with 100% Real Actuals & Accurate Scheduled Installments with Already-Paid Verification
   const calendarData = useMemo(() => {
     // 1. Group all transactions by date key (YYYY-MM-DD)
     const txByDateMap = new Map<string, Transaction[]>();
@@ -148,46 +171,189 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       txByDateMap.get(dateKey)!.push(tx);
     });
 
-    // Helper to extract active debts & installment items due on any specific date
+    // Helper to evaluate debts & installments due on any specific date, verifying if ALREADY PAID
     const getDueForDate = (dateStr: string, dateObj: Date) => {
       const dayOfMonth = dateObj.getDate();
-      const matchingPayables: DebtRecord[] = [];
-      const matchingReceivables: DebtRecord[] = [];
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth(); // 0-indexed
+      const yearMonthPrefix = `${year}-${(month + 1).toString().padStart(2, '0')}`;
+      const isDatePast = dateStr < todayStr;
+
+      const duePayables: ScheduledDebtItem[] = [];
+      const dueReceivables: ScheduledDebtItem[] = [];
+      const paidPayables: ScheduledDebtItem[] = [];
+      const paidReceivables: ScheduledDebtItem[] = [];
 
       debts.forEach((debt) => {
-        if (isDebtPaid(debt)) return;
+        const isInst = debt.type === 'installment' || debt.isInstallment;
+        const isFullyPaid = isDebtPaid(debt);
+        const title = isInst
+          ? debt.itemName || debt.title || 'Cicilan Kredit'
+          : debt.title || debt.personName || 'Tagihan Hutang/Piutang';
+        const personName = debt.personName || '';
+        const providerName = debt.providerName;
 
-        let isDue = false;
-        if (debt.dueDate && debt.dueDate.split('T')[0] === dateStr) {
-          isDue = true;
-        } else if (debt.isInstallment && debt.dueDayOfMonth && debt.dueDayOfMonth === dayOfMonth) {
-          isDue = true;
+        // CASE A: INSTALLMENT / CICILAN BULANAN
+        if (isInst) {
+          const dueDay =
+            debt.dueDayOfMonth ||
+            (debt.dueDate ? parseInt(debt.dueDate.split('-')[2], 10) : undefined) ||
+            (debt.startDate ? parseInt(debt.startDate.split('-')[2], 10) : 5);
+
+          const maxDaysInThisMonth = new Date(year, month + 1, 0).getDate();
+          const validDueDay = Math.min(dueDay, maxDaysInThisMonth);
+
+          // Check if this date matches the installment due day in this month
+          if (dayOfMonth === validDueDay) {
+            // Calculate which installment month (1..tenor) corresponds to this year & month
+            const baseStartDateStr =
+              debt.startDate ||
+              (debt.createdAt ? debt.createdAt.split('T')[0] : null) ||
+              (debt.dueDate ? debt.dueDate.split('T')[0] : null);
+
+            let baseStartYear = year;
+            let baseStartMonth = month;
+            if (baseStartDateStr) {
+              const parsed = new Date(baseStartDateStr + 'T00:00:00');
+              if (!isNaN(parsed.getTime())) {
+                baseStartYear = parsed.getFullYear();
+                baseStartMonth = parsed.getMonth();
+              }
+            }
+
+            const monthIndex = (year - baseStartYear) * 12 + (month - baseStartMonth) + 1;
+            const tenor = debt.tenorMonths || 12;
+
+            // Only valid within the installment schedule range (month 1 to tenor)
+            if (monthIndex >= 1 && monthIndex <= tenor) {
+              const nominal =
+                debt.monthlyInstallment && debt.monthlyInstallment > 0
+                  ? debt.monthlyInstallment
+                  : debt.totalAmount && debt.tenorMonths && debt.tenorMonths > 0
+                  ? Math.round(debt.totalAmount / debt.tenorMonths)
+                  : debt.remainingAmount > 0
+                  ? debt.remainingAmount
+                  : debt.paidAmount || 0;
+
+              // Check if ALREADY PAID:
+              const isMonthPaidByPaidMonths = (debt.paidMonths || 0) >= monthIndex;
+              const matchingPaymentLog = debt.payments?.find(
+                (p) =>
+                  p.monthNumber === monthIndex ||
+                  (p.date && p.date.startsWith(yearMonthPrefix))
+              );
+              const isMonthPaidByLog = !!matchingPaymentLog;
+              const isMonthPaidByZeroRemaining = debt.remainingAmount <= 0;
+
+              // Also check if an expense transaction was logged for this debt in this month
+              const matchingExpenseTx = transactions.find((tx) => {
+                if (tx.type !== 'expense') return false;
+                const txDateStr = tx.date ? tx.date.split('T')[0] : '';
+                if (!txDateStr.startsWith(yearMonthPrefix)) return false;
+                const note = (tx.notes || '').toLowerCase();
+                const tTitle = (tx.title || '').toLowerCase();
+                const dTitle = (debt.title || '').toLowerCase();
+                const dItem = (debt.itemName || '').toLowerCase();
+                return (
+                  note.includes(debt.id) ||
+                  (dTitle && tTitle.includes(dTitle)) ||
+                  (dItem && tTitle.includes(dItem))
+                );
+              });
+              const isMonthPaidByTx = !!matchingExpenseTx;
+
+              const isThisInstallmentPaid =
+                isFullyPaid ||
+                isMonthPaidByPaidMonths ||
+                isMonthPaidByLog ||
+                isMonthPaidByZeroRemaining ||
+                isMonthPaidByTx;
+
+              const scheduledItem: ScheduledDebtItem = {
+                debt,
+                title,
+                personName,
+                providerName,
+                amount: Math.min(nominal, debt.remainingAmount > 0 ? debt.remainingAmount : nominal),
+                isInstallment: true,
+                monthNumber: monthIndex,
+                tenorMonths: tenor,
+                isPaid: isThisInstallmentPaid,
+                status: isThisInstallmentPaid
+                  ? 'paid'
+                  : isDatePast
+                  ? 'overdue'
+                  : 'unpaid',
+                paymentDate: matchingPaymentLog?.date || matchingExpenseTx?.date,
+                paymentNotes: matchingPaymentLog?.notes || matchingExpenseTx?.notes,
+              };
+
+              if (isThisInstallmentPaid) {
+                paidPayables.push(scheduledItem);
+              } else {
+                duePayables.push(scheduledItem);
+              }
+            }
+          }
+          return;
         }
 
-        if (isDue) {
+        // CASE B: NON-INSTALLMENT DEBT (HUTANG PINJAMAN / PIUTANG TUNAI)
+        const dueExactDate = debt.dueDate ? debt.dueDate.split('T')[0] : null;
+        if (dueExactDate === dateStr) {
+          const nominal = debt.remainingAmount > 0 ? debt.remainingAmount : debt.totalAmount;
+          const isPaid = isFullyPaid || debt.remainingAmount <= 0 || debt.status === 'paid';
+
+          const matchingPaymentLog = debt.payments?.find(
+            (p) => p.date && p.date.split('T')[0] <= dateStr
+          );
+
+          const scheduledItem: ScheduledDebtItem = {
+            debt,
+            title,
+            personName,
+            providerName,
+            amount: nominal,
+            isInstallment: false,
+            isPaid,
+            status: isPaid ? 'paid' : isDatePast ? 'overdue' : 'unpaid',
+            paymentDate: matchingPaymentLog?.date,
+            paymentNotes: matchingPaymentLog?.notes,
+          };
+
           if (debt.type === 'receivable') {
-            matchingReceivables.push(debt);
+            if (isPaid) {
+              paidReceivables.push(scheduledItem);
+            } else {
+              dueReceivables.push(scheduledItem);
+            }
           } else {
-            matchingPayables.push(debt);
+            if (isPaid) {
+              paidPayables.push(scheduledItem);
+            } else {
+              duePayables.push(scheduledItem);
+            }
           }
         }
       });
 
-      const payablesAmount = matchingPayables.reduce((sum, d) => {
-        const installmentAmt = d.monthlyInstallment || d.remainingAmount;
-        return sum + Math.min(installmentAmt, d.remainingAmount);
-      }, 0);
+      // Amounts calculation:
+      // Only UNPAID upcoming dues impact future forecasted cash deductions
+      const duePayablesAmount = duePayables.reduce((sum, d) => sum + d.amount, 0);
+      const dueReceivablesAmount = dueReceivables.reduce((sum, d) => sum + d.amount, 0);
 
-      const receivablesAmount = matchingReceivables.reduce((sum, d) => {
-        const installmentAmt = d.monthlyInstallment || d.remainingAmount;
-        return sum + Math.min(installmentAmt, d.remainingAmount);
-      }, 0);
+      const paidPayablesAmount = paidPayables.reduce((sum, d) => sum + d.amount, 0);
+      const paidReceivablesAmount = paidReceivables.reduce((sum, d) => sum + d.amount, 0);
 
       return {
-        payables: matchingPayables,
-        receivables: matchingReceivables,
-        payablesAmount,
-        receivablesAmount,
+        duePayables,
+        dueReceivables,
+        duePayablesAmount,
+        dueReceivablesAmount,
+        paidPayables,
+        paidReceivables,
+        paidPayablesAmount,
+        paidReceivablesAmount,
       };
     };
 
@@ -226,11 +392,15 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         actualIncome,
         actualExpense,
         actualNetFlow: actualIncome - actualExpense,
-        duePayables: dueInfo.payables,
-        dueReceivables: dueInfo.receivables,
-        duePayablesAmount: dueInfo.payablesAmount,
-        dueReceivablesAmount: dueInfo.receivablesAmount,
-        dayNetFlow: actualIncome + dueInfo.receivablesAmount - actualExpense - dueInfo.payablesAmount,
+        duePayables: dueInfo.duePayables,
+        dueReceivables: dueInfo.dueReceivables,
+        duePayablesAmount: dueInfo.duePayablesAmount,
+        dueReceivablesAmount: dueInfo.dueReceivablesAmount,
+        paidPayables: dueInfo.paidPayables,
+        paidReceivables: dueInfo.paidReceivables,
+        paidPayablesAmount: dueInfo.paidPayablesAmount,
+        paidReceivablesAmount: dueInfo.paidReceivablesAmount,
+        dayNetFlow: actualIncome + dueInfo.dueReceivablesAmount - actualExpense - dueInfo.duePayablesAmount,
         endOfDayCashBalance: 0,
       });
     }
@@ -261,11 +431,15 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         actualIncome,
         actualExpense,
         actualNetFlow: actualIncome - actualExpense,
-        duePayables: dueInfo.payables,
-        dueReceivables: dueInfo.receivables,
-        duePayablesAmount: dueInfo.payablesAmount,
-        dueReceivablesAmount: dueInfo.receivablesAmount,
-        dayNetFlow: actualIncome + dueInfo.receivablesAmount - actualExpense - dueInfo.payablesAmount,
+        duePayables: dueInfo.duePayables,
+        dueReceivables: dueInfo.dueReceivables,
+        duePayablesAmount: dueInfo.duePayablesAmount,
+        dueReceivablesAmount: dueInfo.dueReceivablesAmount,
+        paidPayables: dueInfo.paidPayables,
+        paidReceivables: dueInfo.paidReceivables,
+        paidPayablesAmount: dueInfo.paidPayablesAmount,
+        paidReceivablesAmount: dueInfo.paidReceivablesAmount,
+        dayNetFlow: actualIncome + dueInfo.dueReceivablesAmount - actualExpense - dueInfo.duePayablesAmount,
         endOfDayCashBalance: 0,
       });
     }
@@ -293,11 +467,15 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         actualIncome,
         actualExpense,
         actualNetFlow: actualIncome - actualExpense,
-        duePayables: dueInfo.payables,
-        dueReceivables: dueInfo.receivables,
-        duePayablesAmount: dueInfo.payablesAmount,
-        dueReceivablesAmount: dueInfo.receivablesAmount,
-        dayNetFlow: actualIncome + dueInfo.receivablesAmount - actualExpense - dueInfo.payablesAmount,
+        duePayables: dueInfo.duePayables,
+        dueReceivables: dueInfo.dueReceivables,
+        duePayablesAmount: dueInfo.duePayablesAmount,
+        dueReceivablesAmount: dueInfo.dueReceivablesAmount,
+        paidPayables: dueInfo.paidPayables,
+        paidReceivables: dueInfo.paidReceivables,
+        paidPayablesAmount: dueInfo.paidPayablesAmount,
+        paidReceivablesAmount: dueInfo.paidReceivablesAmount,
+        dayNetFlow: actualIncome + dueInfo.dueReceivablesAmount - actualExpense - dueInfo.duePayablesAmount,
         endOfDayCashBalance: 0,
       });
     }
@@ -306,7 +484,8 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     const todayIndex = daysList.findIndex((d) => d.isToday);
 
     if (todayIndex !== -1) {
-      // Current calendar grid contains TODAY
+      // Current calendar grid contains TODAY:
+      // Today's real end-of-day cash balance equals current actual total balance across all accounts
       daysList[todayIndex].endOfDayCashBalance = totalActualCashNow;
 
       // Backward propagation for past days in grid:
@@ -318,7 +497,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       }
 
       // Forward propagation for future days in grid:
-      // forwardDayBalance = prevDayBalance + actualIncome + dueReceivables - actualExpense - duePayables
+      // forwardDayBalance = prevDayBalance + actualIncome + dueReceivables (unpaid) - actualExpense - duePayables (unpaid)
       for (let i = todayIndex + 1; i < daysList.length; i++) {
         const current = daysList[i];
         const prev = daysList[i - 1];
@@ -331,12 +510,10 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       }
     } else {
       // Month is entirely in the past or entirely in the future
-      const firstGridDate = daysList[0].date;
       const lastGridDate = daysList[daysList.length - 1].date;
 
       if (lastGridDate < today) {
         // ENTIRELY PAST: Step backward from today's actual total cash balance
-        // Collect all transactions occurred between the last day in grid and today
         const lastGridDateStr = daysList[daysList.length - 1].dateStr;
         const txsAfterGrid = transactions.filter((t) => {
           const tDateStr = t.date ? t.date.split('T')[0] : '';
@@ -367,7 +544,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
           const cIncome = cTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
           const cExpense = cTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
           const cDue = getDueForDate(cStr, cursorDate);
-          runningBal += cIncome + cDue.receivablesAmount - cExpense - cDue.payablesAmount;
+          runningBal += cIncome + cDue.dueReceivablesAmount - cExpense - cDue.duePayablesAmount;
           cursorDate.setDate(cursorDate.getDate() + 1);
         }
 
@@ -422,7 +599,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     return calendarData.daysList.find((d) => d.dateStr === selectedDateStr) || null;
   }, [selectedDateStr, calendarData.daysList]);
 
-  // Summary Metrics for the current month (100% Real)
+  // Summary Metrics for the current month (100% Real & Verified)
   const monthSummary = useMemo(() => {
     const days = calendarData.currentMonthDays;
     if (!days || days.length === 0) {
@@ -433,6 +610,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         totalExpenseMonth: 0,
         totalDuePayablesMonth: 0,
         totalDueReceivablesMonth: 0,
+        totalPaidPayablesMonth: 0,
         netMonthChange: 0,
         isDeficit: false,
       };
@@ -445,6 +623,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
     const totalExpenseMonth = days.reduce((sum, d) => sum + d.actualExpense, 0);
     const totalDuePayablesMonth = days.reduce((sum, d) => sum + d.duePayablesAmount, 0);
     const totalDueReceivablesMonth = days.reduce((sum, d) => sum + d.dueReceivablesAmount, 0);
+    const totalPaidPayablesMonth = days.reduce((sum, d) => sum + d.paidPayablesAmount, 0);
 
     const netMonthChange = projectedEndBalance - startBalance;
 
@@ -455,6 +634,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
       totalExpenseMonth,
       totalDuePayablesMonth,
       totalDueReceivablesMonth,
+      totalPaidPayablesMonth,
       netMonthChange,
       isDeficit: projectedEndBalance < 0 || netMonthChange < 0,
     };
@@ -472,17 +652,17 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
               <CalendarIcon className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
               Kalender Sisa Kas Riil
             </span>
-            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2 py-0.5 rounded-full flex items-center gap-1">
+            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 px-2.5 py-0.5 rounded-full flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              Perhitungan Riil (Transaksi & Cicilan Aktual)
+              Verifikasi Status Terbayar Aktif
             </span>
           </div>
 
           <h2 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white tracking-tight mt-1">
-            Posisi Sisa Kas Harian Terjadwal
+            Posisi Sisa Kas Harian & Jadwal Cicilan
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-medium max-w-2xl mt-0.5">
-            Dihitung murni dari saldo riil akun, mutasi transaksi aktual, serta jadwal jatuh tempo cicilan hutang dan piutang tanpa estimasi asumsi biaya hidup.
+            Dihitung presisi dari saldo riil akun, mutasi transaksi aktual, serta mengecek status tagihan/cicilan yang sudah dibayar agar perhitungan sisa kas pas tanpa duplikasi.
           </p>
         </div>
 
@@ -522,7 +702,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         </div>
       </div>
 
-      {/* 2. Key Month Financial Health Banner & Metrics (100% Real) */}
+      {/* 2. Key Month Financial Health Banner & Metrics (100% Real & Verified) */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Metric 1: Sisa Kas Akhir Bulan */}
         <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
@@ -571,11 +751,11 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
           </div>
         </div>
 
-        {/* Metric 3: Total Outflow & Tagihan */}
+        {/* Metric 3: Total Outflow & Tagihan Belum Dibayar */}
         <div className="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200/70 dark:border-rose-900/50 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-rose-800 dark:text-rose-400 uppercase tracking-wider">
-              Total Outflow & Cicilan
+              Outflow & Tagihan Sisa
             </span>
             <div className="w-6 h-6 rounded-lg bg-rose-100 dark:bg-rose-900 text-rose-600 dark:text-rose-400 flex items-center justify-center">
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -587,12 +767,12 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
             </div>
             <div className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 mt-1 truncate">
               Aktual: {formatMoney(monthSummary.totalExpenseMonth, true)}
-              {monthSummary.totalDuePayablesMonth > 0 && ` + Tagihan: ${formatMoney(monthSummary.totalDuePayablesMonth, true)}`}
+              {monthSummary.totalDuePayablesMonth > 0 ? ` + Tagihan Sisa: ${formatMoney(monthSummary.totalDuePayablesMonth, true)}` : ' (Semua cicilan lunas)'}
             </div>
           </div>
         </div>
 
-        {/* Metric 4: Titik Kritis Kas Terendah */}
+        {/* Metric 4: Cicilan Terbayar & Titik Kas Terendah */}
         <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/50 flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold text-amber-800 dark:text-amber-400 uppercase tracking-wider">
@@ -609,6 +789,11 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
             <div className="text-[11px] font-bold text-amber-700 dark:text-amber-400 mt-1 flex items-center gap-1">
               <Clock className="w-3 h-3" />
               <span>{calendarData.lowestDay ? formatDateIndo(calendarData.lowestDay.dateStr) : '-'}</span>
+              {monthSummary.totalPaidPayablesMonth > 0 && (
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 ml-auto font-extrabold">
+                  ✓ {formatMoney(monthSummary.totalPaidPayablesMonth, true)} Lunas
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -640,7 +825,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
                   setSelectedDateStr(day.dateStr);
                   setDetailModalOpen(true);
                 }}
-                className={`min-h-[86px] sm:min-h-[102px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group select-none ${
+                className={`min-h-[86px] sm:min-h-[104px] p-2 sm:p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative group select-none ${
                   !day.isCurrentMonth
                     ? 'opacity-35 bg-slate-50/50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800/40 text-slate-400'
                     : day.isToday
@@ -666,24 +851,28 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
 
                   {/* Badges / Dots */}
                   <div className="flex items-center gap-1">
+                    {/* Paid installment badge */}
+                    {day.paidPayables.length > 0 && (
+                      <span
+                        className="w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white dark:ring-slate-900"
+                        title={`${day.paidPayables.length} Cicilan / Tagihan Sudah Terbayar (Lunas)`}
+                      />
+                    )}
+                    {/* Unpaid due payable badge */}
                     {day.duePayables.length > 0 && (
                       <span
                         className="w-2 h-2 rounded-full bg-rose-500 ring-1 ring-white dark:ring-slate-900"
-                        title={`${day.duePayables.length} Tagihan / Cicilan Jatuh Tempo`}
+                        title={`${day.duePayables.length} Tagihan Belum Dibayar`}
                       />
                     )}
+                    {/* Receivable badge */}
                     {day.dueReceivables.length > 0 && (
                       <span
                         className="w-2 h-2 rounded-full bg-blue-500 ring-1 ring-white dark:ring-slate-900"
                         title={`${day.dueReceivables.length} Piutang Masuk`}
                       />
                     )}
-                    {day.actualTransactions.length > 0 && (
-                      <span
-                        className="w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white dark:ring-slate-900"
-                        title={`${day.actualTransactions.length} Transaksi Aktual`}
-                      />
-                    )}
+                    {/* Lowest month indicator */}
                     {day.isLowestBalanceMonthDay && day.isCurrentMonth && (
                       <span
                         className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950 px-1 py-0.2 rounded-md leading-none"
@@ -707,14 +896,22 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
                       -{formatMoney(day.actualExpense, true)}
                     </div>
                   )}
+                  {/* If no actual expense but has unpaid due payables */}
                   {day.actualTransactions.length === 0 && day.duePayablesAmount > 0 && (
                     <div className="text-[9px] sm:text-[10px] font-bold text-rose-700 dark:text-rose-300 truncate leading-tight font-mono bg-rose-50 dark:bg-rose-950/60 px-1 py-0.2 rounded">
                       Tagihan: -{formatMoney(day.duePayablesAmount, true)}
                     </div>
                   )}
+                  {/* If no actual transactions but has paid installment */}
+                  {day.actualTransactions.length === 0 && day.duePayablesAmount === 0 && day.paidPayables.length > 0 && (
+                    <div className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 truncate leading-tight font-mono bg-emerald-50 dark:bg-emerald-950/60 px-1 py-0.2 rounded flex items-center gap-0.5">
+                      <Check className="w-2.5 h-2.5" />
+                      <span>Lunas: {formatMoney(day.paidPayablesAmount, true)}</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* End-of-day Cash Balance (Pure Real) */}
+                {/* End-of-day Cash Balance (100% Real & Exact) */}
                 <div className="pt-1 border-t border-slate-100 dark:border-slate-800/80 mt-auto">
                   <div className="text-[9px] text-slate-400 font-semibold truncate leading-tight">
                     Sisa Kas:
@@ -742,11 +939,11 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-            <span>Pemasukan / Transaksi Aktual</span>
+            <span>Pemasukan / Cicilan Terbayar (Lunas)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-            <span>Tagihan & Cicilan Jatuh Tempo</span>
+            <span>Tagihan Jatuh Tempo Belum Dibayar</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
@@ -831,7 +1028,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
               </div>
 
               {selectedDayData.actualTransactions.length === 0 ? (
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-center text-xs text-slate-400">
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-center text-xs text-slate-400">
                   Tidak ada transaksi tercatat di tanggal ini
                 </div>
               ) : (
@@ -894,47 +1091,89 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
               )}
             </div>
 
-            {/* Debts & Installments due on this day */}
+            {/* Cicilan / Tagihan yang SUDAH DIBAYAR (Lunas) */}
+            {selectedDayData.paidPayables.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  Cicilan & Tagihan Sudah Terbayar / Lunas ({selectedDayData.paidPayables.length})
+                </span>
+
+                <div className="space-y-2">
+                  {selectedDayData.paidPayables.map((item, idx) => (
+                    <div
+                      key={`paid-item-${item.debt.id}-${idx}`}
+                      className="p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-emerald-950 dark:text-emerald-200 truncate flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                          <span>{item.title}</span>
+                          {item.personName && <span className="text-slate-400">({item.personName})</span>}
+                        </div>
+                        <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">
+                          {item.isInstallment && item.monthNumber
+                            ? `Cicilan Bulan Ke-${item.monthNumber}/${item.tenorMonths} • Sudah Terbayar`
+                            : 'Sudah Lunas • Tidak Mengurangi Kas Lagi'}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        <div className="text-xs font-black font-mono text-emerald-700 dark:text-emerald-400">
+                          {formatMoney(item.amount)}
+                        </div>
+                        <span className="text-[9px] font-bold bg-emerald-200/60 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.2 rounded">
+                          LUNAS
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Debts & Installments BELUM DIBAYAR (Unpaid Due) */}
             {(selectedDayData.duePayables.length > 0 || selectedDayData.dueReceivables.length > 0) && (
               <div className="space-y-2">
                 <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                   <CreditCard className="w-4 h-4 text-rose-500" />
-                  Jatuh Tempo Hutang, Cicilan & Piutang ({selectedDayData.duePayables.length + selectedDayData.dueReceivables.length})
+                  Jatuh Tempo Belum Dibayar ({selectedDayData.duePayables.length + selectedDayData.dueReceivables.length})
                 </span>
 
                 <div className="space-y-2">
-                  {selectedDayData.duePayables.map((debt) => (
+                  {selectedDayData.duePayables.map((item, idx) => (
                     <div
-                      key={debt.id}
+                      key={`due-payable-${item.debt.id}-${idx}`}
                       className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/70 dark:border-rose-800/60 flex items-center justify-between"
                     >
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-rose-950 dark:text-rose-200 truncate">
-                          {debt.title} ({debt.personName})
+                          {item.title} {item.personName && `(${item.personName})`}
                         </div>
                         <div className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold">
-                          {debt.isInstallment ? 'Cicilan Bulanan' : 'Hutang Pinjaman'} • Jatuh Tempo
+                          {item.isInstallment && item.monthNumber
+                            ? `Cicilan Bulan Ke-${item.monthNumber}/${item.tenorMonths} • Belum Dibayar`
+                            : 'Hutang Pinjaman • Jatuh Tempo'}
                         </div>
                       </div>
                       <div className="text-right shrink-0 ml-2">
                         <div className="text-xs font-black font-mono text-rose-600 dark:text-rose-400">
-                          -{formatMoney(debt.monthlyInstallment || debt.remainingAmount)}
+                          -{formatMoney(item.amount)}
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          Sisa Total: {formatMoney(debt.remainingAmount, true)}
+                          Sisa: {formatMoney(item.debt.remainingAmount, true)}
                         </div>
                       </div>
                     </div>
                   ))}
 
-                  {selectedDayData.dueReceivables.map((debt) => (
+                  {selectedDayData.dueReceivables.map((item, idx) => (
                     <div
-                      key={debt.id}
+                      key={`due-receivable-${item.debt.id}-${idx}`}
                       className="p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/60 flex items-center justify-between"
                     >
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-blue-950 dark:text-blue-200 truncate">
-                          {debt.title} ({debt.personName})
+                          {item.title} {item.personName && `(${item.personName})`}
                         </div>
                         <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">
                           Piutang Akan Diterima
@@ -942,7 +1181,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
                       </div>
                       <div className="text-right shrink-0 ml-2">
                         <div className="text-xs font-black font-mono text-emerald-600 dark:text-emerald-400">
-                          +{formatMoney(debt.remainingAmount)}
+                          +{formatMoney(item.amount)}
                         </div>
                       </div>
                     </div>
@@ -965,7 +1204,7 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
                   <span>+ Catat Transaksi Tanggal Ini</span>
                 </button>
               )}
-              {onNavigateToDebts && (selectedDayData.duePayables.length > 0 || selectedDayData.dueReceivables.length > 0) && (
+              {onNavigateToDebts && (selectedDayData.duePayables.length > 0 || selectedDayData.paidPayables.length > 0) && (
                 <button
                   onClick={() => {
                     setDetailModalOpen(false);
