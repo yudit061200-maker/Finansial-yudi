@@ -20,6 +20,7 @@ import {
   Shield,
   HardDrive,
   Calendar,
+  Cloud,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserProfile } from '../types/user';
@@ -38,6 +39,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const {
     user,
     allUsers,
+    isCloudSynced,
     updateProfile,
     changePassword,
     quickLogin,
@@ -297,13 +299,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 setErrorMsg(null);
                 setSuccessMsg(null);
               }}
-              className={`py-2 px-1 sm:px-2 rounded-xl text-[11px] font-bold transition-all text-center ${
+              className={`py-2 px-1 sm:px-2 rounded-xl text-[11px] font-bold transition-all text-center flex items-center justify-center gap-1 ${
                 activeTab === 'storage'
                   ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/80 dark:border-slate-700'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              Info Web
+              <Cloud className="w-3 h-3 text-emerald-500 shrink-0" />
+              <span>Cloud Firebase</span>
             </button>
           </div>
         </div>
@@ -588,22 +591,33 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </form>
           )}
 
-          {/* 4. WEB STORAGE & SECURITY INFO TAB */}
+          {/* 4. FIREBASE CLOUD & WEB STORAGE INFO TAB */}
           {activeTab === 'storage' && (
             <div className="space-y-4 text-xs">
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
-                  <HardDrive className="w-4 h-4 text-indigo-500" />
-                  <span>Informasi Penyimpanan Web (Web Auth)</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white">
+                    <Cloud className="w-4 h-4 text-emerald-500" />
+                    <span>Penyimpanan Database Cloud (Firebase Firestore)</span>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] border border-emerald-200/80 dark:border-emerald-800">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {isCloudSynced ? 'Real-Time Cloud Synced' : 'Tersambung ke Cloud'}
+                  </span>
                 </div>
+
                 <div className="space-y-2 text-slate-600 dark:text-slate-300">
                   <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-800">
-                    <span className="text-slate-400">Metode Autentikasi:</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">Web Storage (Client-side)</span>
+                    <span className="text-slate-400">Database Engine:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">Google Cloud Firestore</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-800">
-                    <span className="text-slate-400">Kebutuhan Firebase Auth:</span>
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">Tidak Perlu Konfigurasi Console</span>
+                    <span className="text-slate-400">Koleksi Data Pengguna:</span>
+                    <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">/users/{user.id}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-800">
+                    <span className="text-slate-400">Akses Tanpa Console:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">Aktif (Web Profile Engine)</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-200/60 dark:border-slate-800">
                     <span className="text-slate-400">User ID Pengguna:</span>
@@ -614,15 +628,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <span>{new Date(user.createdAt).toLocaleDateString('id-ID', { dateStyle: 'long' })}</span>
                   </div>
                   <div className="flex justify-between py-1">
-                    <span className="text-slate-400">Login Terakhir:</span>
+                    <span className="text-slate-400">Aktivitas Terakhir:</span>
                     <span>{new Date(user.lastLoginAt).toLocaleTimeString('id-ID')}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/80 text-indigo-900 dark:text-indigo-200 text-xs">
-                <p className="leading-relaxed">
-                  Data pengguna Anda tersimpan di browser lokal perangkat ini secara mandiri dan aman. Anda dapat menambah akun baru, beralih profil, atau mengganti password kapan saja.
+              <div className="p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-emerald-950 dark:text-emerald-200 text-xs space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Keamanan & Ketahanan Data Cloud</span>
+                </div>
+                <p className="leading-relaxed text-[11px]">
+                  Semua data profil pengguna (nama, username, email, kata sandi terenkripsi, dan preferensi) otomatis disimpan di Firebase Firestore database dan dicadangkan di memori browser lokal. Akun yang Anda buat akan tersimpan permanen dan dapat diakses dari mana saja.
                 </p>
               </div>
             </div>

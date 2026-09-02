@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { UserProfile, LoginCredentials, RegisterCredentials, AuthSession } from '../types/user';
 import { authService, DEFAULT_WEB_USERS } from '../services/authService';
+import { subscribeUsers, seedUsersToFirestore } from '../services/firebaseDb';
 
 interface AuthContextType {
   user: UserProfile | null;
   session: AuthSession | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isCloudSynced: boolean;
   allUsers: UserProfile[];
   refreshUsers: () => void;
   login: (credentials: LoginCredentials) => Promise<{ success: boolean; message: string }>;
@@ -31,6 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<AuthSession | null>(null);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'demo'>('login');
@@ -40,11 +43,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAllUsers(users);
   }, []);
 
-  // Initialize session on mount
+  // Initialize session on mount and subscribe to Firestore users
   useEffect(() => {
     try {
-      const users = authService.getUsers();
-      setAllUsers(users);
+      const initialUsers = authService.getUsers();
+      setAllUsers(initialUsers);
       const active = authService.getCurrentSession();
       setSession(active);
     } catch (e) {
@@ -52,10 +55,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
+
+    // Subscribe to Firebase Firestore real-time updates for users collection
+    const unsubscribe = subscribeUsers((firestoreUsers) => {
+      if (firestoreUsers.length === 0) {
+        // First-time Firestore setup for users collection: auto-seed defaults
+        seedUsersToFirestore(DEFAULT_WEB_USERS).catch((err) => {
+          console.warn('Initial seed to Firestore users collection notice:', err);
+        });
+      } else {
+        const synced = authService.syncUsersFromFirestore(firestoreUsers);
+        setAllUsers(synced);
+        setIsCloudSynced(true);
+
+        // Sync active session if the current user profile was updated remotely
+        const active = authService.getCurrentSession();
+        if (active?.user?.id) {
+          const freshCurrent = firestoreUsers.find((u) => u.id === active.user.id);
+          if (freshCurrent) {
+            setSession((prev) => (prev ? { ...prev, user: freshCurrent } : null));
+          }
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const login = async (credentials: LoginCredentials) => {
-    const res = authService.login(credentials);
+    const res = await authService.login(credentials);
     if (res.success && res.session) {
       setSession(res.session);
       refreshUsers();
@@ -65,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const quickLogin = async (userId: string) => {
-    const res = authService.quickLogin(userId);
+    const res = await authService.quickLogin(userId);
     if (res.success && res.session) {
       setSession(res.session);
       refreshUsers();
@@ -75,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (credentials: RegisterCredentials) => {
-    const res = authService.register(credentials);
+    const res = await authService.register(credentials);
     if (res.success && res.session) {
       setSession(res.session);
       refreshUsers();
@@ -95,7 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!session?.user?.id) {
       return { success: false, message: 'Tidak ada sesi login aktif.' };
     }
-    const res = authService.updateProfile(session.user.id, updates);
+    const res = await authService.updateProfile(session.user.id, updates);
     if (res.success && res.user) {
       setSession((prev) => (prev ? { ...prev, user: res.user! } : null));
       refreshUsers();
@@ -107,12 +137,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!session?.user?.id) {
       return { success: false, message: 'Tidak ada sesi login aktif.' };
     }
-    const res = authService.changePassword(session.user.id, oldPass, newPass);
+    const res = await authService.changePassword(session.user.id, oldPass, newPass);
     return res;
   };
 
   const deleteUser = async (userId: string) => {
-    const res = authService.deleteUser(userId);
+    const res = await authService.deleteUser(userId);
     if (res.success) {
       const active = authService.getCurrentSession();
       setSession(active);
@@ -135,6 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         isAuthenticated: !!session?.user,
         isLoading,
+        isCloudSynced,
         allUsers,
         refreshUsers,
         login,

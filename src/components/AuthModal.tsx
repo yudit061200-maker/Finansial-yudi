@@ -635,9 +635,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="px-6 py-3 bg-slate-50 dark:bg-slate-900/60 border-t border-slate-200/80 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Kredensial disimpan lokal di browser Web Storage</span>
+            <span>Kredensial & Akun tersimpan aman di Cloud Firebase Firestore</span>
           </div>
-          <span className="font-mono text-[10px]">v1.0-WebAuth</span>
+          <span className="font-mono text-[10px]">Cloud Synced</span>
         </div>
 
       </div>

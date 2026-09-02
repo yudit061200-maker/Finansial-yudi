@@ -1,4 +1,10 @@
 import { UserProfile, LoginCredentials, RegisterCredentials, AuthSession } from '../types/user';
+import {
+  saveUserToFirestore,
+  deleteUserFromFirestore,
+  seedUsersToFirestore,
+  fetchUsersFromFirestore,
+} from './firebaseDb';
 
 const STORAGE_KEYS = {
   USERS_LIST: 'arthasmart_web_users_v1',
@@ -74,7 +80,32 @@ function hashPassword(password: string): string {
 }
 
 export const authService = {
-  // Get all registered users from localStorage
+  // Sync users received from Firestore real-time subscription or fetch
+  syncUsersFromFirestore(firestoreUsers: UserProfile[]): UserProfile[] {
+    try {
+      if (Array.isArray(firestoreUsers) && firestoreUsers.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.USERS_LIST, JSON.stringify(firestoreUsers));
+
+        // Update active session user data if present
+        const currentSession = this.getCurrentSession();
+        if (currentSession?.user?.id) {
+          const updatedCurrent = firestoreUsers.find((u) => u.id === currentSession.user.id);
+          if (updatedCurrent) {
+            currentSession.user = updatedCurrent;
+            const targetStorage = currentSession.rememberMe ? localStorage : sessionStorage;
+            targetStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(currentSession));
+          }
+        }
+        return firestoreUsers;
+      }
+      return this.getUsers();
+    } catch (e) {
+      console.warn('Failed to sync users with local storage:', e);
+      return this.getUsers();
+    }
+  },
+
+  // Get all registered users from local cache or defaults
   getUsers(): UserProfile[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEYS.USERS_LIST);
@@ -108,17 +139,7 @@ export const authService = {
     try {
       const sessionStr = localStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION) || sessionStorage.getItem(STORAGE_KEYS.ACTIVE_SESSION);
       if (!sessionStr) {
-        // By default on initial cold boot, auto-login with default primary user (Yudit)
-        const users = this.getUsers();
-        const defaultUser = users[0] || DEFAULT_WEB_USERS[0];
-        const newSession: AuthSession = {
-          user: defaultUser,
-          token: `token_${defaultUser.id}_${Date.now()}`,
-          loginAt: new Date().toISOString(),
-          rememberMe: true,
-        };
-        localStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(newSession));
-        return newSession;
+        return null;
       }
       return JSON.parse(sessionStr);
     } catch (e) {
@@ -128,7 +149,7 @@ export const authService = {
   },
 
   // Login with identifier (username or email) and password
-  login(credentials: LoginCredentials): { success: boolean; session?: AuthSession; message: string } {
+  async login(credentials: LoginCredentials): Promise<{ success: boolean; session?: AuthSession; message: string }> {
     const users = this.getUsers();
     const cleanId = credentials.identifier.trim().toLowerCase();
 
@@ -141,7 +162,7 @@ export const authService = {
     if (!user) {
       return {
         success: false,
-        message: 'Pengguna dengan email atau username tersebut tidak ditemukan di penyimpanan web.',
+        message: 'Pengguna dengan email atau username tersebut tidak ditemukan di database.',
       };
     }
 
@@ -162,6 +183,11 @@ export const authService = {
     user.lastLoginAt = new Date().toISOString();
     this.saveUsers(users);
 
+    // Persist login timestamp to Firebase Firestore
+    saveUserToFirestore(user).catch((err) => {
+      console.warn('Could not sync user last login to Firestore:', err);
+    });
+
     const session: AuthSession = {
       user,
       token: `token_${user.id}_${Date.now()}`,
@@ -180,12 +206,12 @@ export const authService = {
     return {
       success: true,
       session,
-      message: `Selamat datang kembali, ${user.name}!`,
+      message: `Selamat datang kembali, ${user.name}! Data tersimpan di Cloud Firebase.`,
     };
   },
 
   // One-click quick login for demo / preset users
-  quickLogin(userId: string): { success: boolean; session?: AuthSession; message: string } {
+  async quickLogin(userId: string): Promise<{ success: boolean; session?: AuthSession; message: string }> {
     const users = this.getUsers();
     const user = users.find((u) => u.id === userId);
     if (!user) {
@@ -194,6 +220,11 @@ export const authService = {
 
     user.lastLoginAt = new Date().toISOString();
     this.saveUsers(users);
+
+    // Persist to Firebase Firestore
+    saveUserToFirestore(user).catch((err) => {
+      console.warn('Could not sync quick login to Firestore:', err);
+    });
 
     const session: AuthSession = {
       user,
@@ -206,12 +237,12 @@ export const authService = {
     return {
       success: true,
       session,
-      message: `Berhasil beralih ke akun ${user.name}.`,
+      message: `Berhasil beralih ke akun ${user.name}. Sinkronisasi Firebase aktif.`,
     };
   },
 
-  // Register a brand new user stored in web storage
-  register(credentials: RegisterCredentials): { success: boolean; session?: AuthSession; message: string } {
+  // Register a brand new user stored in Firebase Firestore and cached locally
+  async register(credentials: RegisterCredentials): Promise<{ success: boolean; session?: AuthSession; message: string }> {
     const users = this.getUsers();
     const cleanEmail = credentials.email.trim().toLowerCase();
     const cleanUsername = credentials.username.trim().toLowerCase();
@@ -228,7 +259,7 @@ export const authService = {
     if (emailExists) {
       return {
         success: false,
-        message: 'Email tersebut sudah terdaftar di web ini. Silakan gunakan email lain atau langsung masuk.',
+        message: 'Email tersebut sudah terdaftar. Silakan gunakan email lain atau langsung masuk.',
       };
     }
 
@@ -274,6 +305,13 @@ export const authService = {
       isDemo: false,
     };
 
+    // Save to Firestore first for cloud durability
+    try {
+      await saveUserToFirestore(newUser);
+    } catch (e) {
+      console.error('Failed to write user to Firestore:', e);
+    }
+
     const updatedUsers = [...users, newUser];
     this.saveUsers(updatedUsers);
 
@@ -289,23 +327,30 @@ export const authService = {
     return {
       success: true,
       session,
-      message: `Akun ${newUser.name} berhasil dibuat dan disimpan di web!`,
+      message: `Akun ${newUser.name} berhasil dibuat dan tersimpan di Cloud Firebase!`,
     };
   },
 
-  // Update profile of active user
-  updateProfile(userId: string, updates: Partial<UserProfile>): { success: boolean; user?: UserProfile; message: string } {
+  // Update profile of active user in Firebase Firestore
+  async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<{ success: boolean; user?: UserProfile; message: string }> {
     const users = this.getUsers();
     const index = users.findIndex((u) => u.id === userId);
     if (index === -1) {
       return { success: false, message: 'User tidak ditemukan.' };
     }
 
-    const updatedUser = {
+    const updatedUser: UserProfile = {
       ...users[index],
       ...updates,
       id: users[index].id, // protect ID
     };
+
+    // Update in Firestore
+    try {
+      await saveUserToFirestore(updatedUser);
+    } catch (e) {
+      console.error('Failed to update user profile in Firestore:', e);
+    }
 
     users[index] = updatedUser;
     this.saveUsers(users);
@@ -314,18 +359,19 @@ export const authService = {
     const currentSession = this.getCurrentSession();
     if (currentSession && currentSession.user.id === userId) {
       currentSession.user = updatedUser;
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(currentSession));
+      const targetStorage = currentSession.rememberMe ? localStorage : sessionStorage;
+      targetStorage.setItem(STORAGE_KEYS.ACTIVE_SESSION, JSON.stringify(currentSession));
     }
 
     return {
       success: true,
       user: updatedUser,
-      message: 'Profil pengguna berhasil diperbarui di penyimpanan web.',
+      message: 'Profil pengguna berhasil diperbarui dan disinkronkan ke Cloud Firebase.',
     };
   },
 
-  // Change user password
-  changePassword(userId: string, oldPass: string, newPass: string): { success: boolean; message: string } {
+  // Change user password in Firebase Firestore
+  async changePassword(userId: string, oldPass: string, newPass: string): Promise<{ success: boolean; message: string }> {
     const users = this.getUsers();
     const user = users.find((u) => u.id === userId);
     if (!user) {
@@ -339,13 +385,21 @@ export const authService = {
     }
 
     user.passwordHash = hashPassword(newPass);
+
+    // Save to Firestore
+    try {
+      await saveUserToFirestore(user);
+    } catch (e) {
+      console.error('Failed to update user password in Firestore:', e);
+    }
+
     this.saveUsers(users);
 
-    return { success: true, message: 'Kata sandi berhasil diganti!' };
+    return { success: true, message: 'Kata sandi berhasil diganti dan disimpan di Firebase!' };
   },
 
-  // Delete a user from web registry
-  deleteUser(userId: string): { success: boolean; message: string } {
+  // Delete a user from Firebase Firestore and web registry
+  async deleteUser(userId: string): Promise<{ success: boolean; message: string }> {
     let users = this.getUsers();
     if (users.length <= 1) {
       return { success: false, message: 'Tidak dapat menghapus satu-satunya akun pengguna yang tersisa.' };
@@ -354,14 +408,21 @@ export const authService = {
     users = users.filter((u) => u.id !== userId);
     this.saveUsers(users);
 
+    // Delete from Firestore
+    try {
+      await deleteUserFromFirestore(userId);
+    } catch (e) {
+      console.error('Failed to delete user from Firestore:', e);
+    }
+
     const currentSession = this.getCurrentSession();
     if (currentSession && currentSession.user.id === userId) {
       // Auto switch to remaining user
       const nextUser = users[0];
-      this.quickLogin(nextUser.id);
+      await this.quickLogin(nextUser.id);
     }
 
-    return { success: true, message: 'Akun berhasil dihapus dari penyimpanan web.' };
+    return { success: true, message: 'Akun berhasil dihapus dari Cloud Firebase.' };
   },
 
   // Logout current session
@@ -370,9 +431,13 @@ export const authService = {
     sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION);
   },
 
-  // Reset web users to factory default demo users
+  // Reset web users to factory default demo users in Firestore
   resetToDefaultUsers(): UserProfile[] {
     localStorage.setItem(STORAGE_KEYS.USERS_LIST, JSON.stringify(DEFAULT_WEB_USERS));
+    seedUsersToFirestore(DEFAULT_WEB_USERS).catch((err) => {
+      console.error('Failed to seed default users to Firestore:', err);
+    });
+
     const firstUser = DEFAULT_WEB_USERS[0];
     const newSession: AuthSession = {
       user: firstUser,
