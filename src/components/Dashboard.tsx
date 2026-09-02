@@ -29,6 +29,8 @@ import {
   Target,
   Plus,
   ChevronRight,
+  ChevronLeft,
+  Calendar,
   Edit2,
   HandCoins,
   Clock,
@@ -77,11 +79,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDeleteAccount,
   onResetAccountBalance,
 }) => {
-  const [timeRange, setTimeRange] = useState<'all' | 'this_month' | 'last_30_days' | 'this_year'>('this_month');
+  const [timeRange, setTimeRange] = useState<'all' | 'this_week' | 'this_month' | 'last_30_days' | 'this_year'>('this_month');
   const [chartView, setChartView] = useState<'area' | 'bar'>('area');
+  const [chartTimeRange, setChartTimeRange] = useState<'week' | 'month' | 'year'>('month');
+  const [chartOffset, setChartOffset] = useState<number>(0);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [accountToReset, setAccountToReset] = useState<Account | null>(null);
-  const [hoveredChartDay, setHoveredChartDay] = useState<{ dateStr: string; label: string; income: number; expense: number } | null>(null);
+  const [hoveredChartDay, setHoveredChartDay] = useState<{
+    key: string;
+    dateStr: string;
+    label: string;
+    fullLabel: string;
+    income: number;
+    expense: number;
+    net: number;
+    txCount: number;
+  } | null>(null);
 
   // Helper for masking amounts if privacy mode is on
   const formatMoney = (amount: number, isShort = false) => {
@@ -156,7 +169,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
       const txDate = new Date(tx.date);
       if (isNaN(txDate.getTime())) return true;
 
-      if (timeRange === 'this_month') {
+      if (timeRange === 'this_week') {
+        const diffDays = (now.getTime() - txDate.getTime()) / (1000 * 3600 * 24);
+        return diffDays >= 0 && diffDays <= 7;
+      } else if (timeRange === 'this_month') {
         return txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth;
       } else if (timeRange === 'last_30_days') {
         const diffDays = (now.getTime() - txDate.getTime()) / (1000 * 3600 * 24);
@@ -205,42 +221,187 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return list.sort((a, b) => b.amount - a.amount);
   }, [filteredTransactions, totalExpense]);
 
-  // Daily Cash Flow for SVG Chart (last 14 days)
-  const chartDays = useMemo(() => {
-    const daysMap = new Map<string, { dateStr: string; label: string; income: number; expense: number }>();
-    const today = new Date();
+  // Indonesian Day and Month Reference Tables for Dynamic Cashflow Chart
+  const INDO_DAYS_SHORT = useMemo(() => ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'], []);
+  const INDO_DAYS_FULL = useMemo(() => ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'], []);
+  const INDO_MONTHS_SHORT = useMemo(() => ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'], []);
+  const INDO_MONTHS_FULL = useMemo(() => [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ], []);
 
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(today.getDate() - i);
-      const dateStr = formatDateToYMD(d);
-      const dayNum = d.getDate();
-      const monthShort = d.toLocaleString('id-ID', { month: 'short' });
-      daysMap.set(dateStr, {
-        dateStr,
-        label: `${dayNum} ${monthShort}`,
-        income: 0,
-        expense: 0,
+  // Multi-Timeframe Cash Flow Calculation (Minggu / Bulan / Tahun)
+  const { chartSlots, chartPeriodLabel, periodTotalIncome, periodTotalExpense, periodNetCashflow } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const slots: Array<{
+      key: string;
+      label: string;
+      fullLabel: string;
+      dateStr: string;
+      income: number;
+      expense: number;
+      net: number;
+      txCount: number;
+      isHighlighted?: boolean;
+    }> = [];
+
+    let periodLabel = '';
+
+    if (chartTimeRange === 'week') {
+      // 7 Days View
+      const endAnchor = new Date(today);
+      endAnchor.setDate(today.getDate() - chartOffset * 7);
+
+      const startAnchor = new Date(endAnchor);
+      startAnchor.setDate(endAnchor.getDate() - 6);
+
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(endAnchor);
+        d.setDate(endAnchor.getDate() - i);
+        const dateStr = formatDateToYMD(d);
+        const dayOfWeek = INDO_DAYS_SHORT[d.getDay()];
+        const dayFull = INDO_DAYS_FULL[d.getDay()];
+        const dayNum = d.getDate();
+        const monthShort = INDO_MONTHS_SHORT[d.getMonth()];
+        const monthFull = INDO_MONTHS_FULL[d.getMonth()];
+        const year = d.getFullYear();
+
+        slots.push({
+          key: dateStr,
+          label: `${dayOfWeek} ${dayNum}`,
+          fullLabel: `${dayFull}, ${dayNum} ${monthFull} ${year}`,
+          dateStr,
+          income: 0,
+          expense: 0,
+          net: 0,
+          txCount: 0,
+          isHighlighted: dateStr === formatDateToYMD(today),
+        });
+      }
+
+      const sDay = startAnchor.getDate();
+      const sMonth = INDO_MONTHS_SHORT[startAnchor.getMonth()];
+      const eDay = endAnchor.getDate();
+      const eMonth = INDO_MONTHS_SHORT[endAnchor.getMonth()];
+      const eYear = endAnchor.getFullYear();
+      periodLabel = `${sDay} ${sMonth} – ${eDay} ${eMonth} ${eYear} (7 Hari)`;
+
+      const slotsMap = new Map(slots.map((s) => [s.dateStr, s]));
+      transactions.forEach((tx) => {
+        const dKey = tx.date ? tx.date.split('T')[0] : '';
+        const item = slotsMap.get(dKey);
+        if (item) {
+          if (tx.type === 'income') item.income += tx.amount;
+          if (tx.type === 'expense') item.expense += tx.amount;
+          item.txCount += 1;
+          item.net = item.income - item.expense;
+        }
+      });
+    } else if (chartTimeRange === 'month') {
+      // 30 Days View
+      const endAnchor = new Date(today);
+      endAnchor.setDate(today.getDate() - chartOffset * 30);
+
+      const startAnchor = new Date(endAnchor);
+      startAnchor.setDate(endAnchor.getDate() - 29);
+
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(endAnchor);
+        d.setDate(endAnchor.getDate() - i);
+        const dateStr = formatDateToYMD(d);
+        const dayOfWeek = INDO_DAYS_SHORT[d.getDay()];
+        const dayFull = INDO_DAYS_FULL[d.getDay()];
+        const dayNum = d.getDate();
+        const monthShort = INDO_MONTHS_SHORT[d.getMonth()];
+        const monthFull = INDO_MONTHS_FULL[d.getMonth()];
+        const year = d.getFullYear();
+
+        slots.push({
+          key: dateStr,
+          label: `${dayNum} ${monthShort}`,
+          fullLabel: `${dayFull}, ${dayNum} ${monthFull} ${year}`,
+          dateStr,
+          income: 0,
+          expense: 0,
+          net: 0,
+          txCount: 0,
+          isHighlighted: dateStr === formatDateToYMD(today),
+        });
+      }
+
+      const sDay = startAnchor.getDate();
+      const sMonth = INDO_MONTHS_SHORT[startAnchor.getMonth()];
+      const eDay = endAnchor.getDate();
+      const eMonth = INDO_MONTHS_SHORT[endAnchor.getMonth()];
+      const eYear = endAnchor.getFullYear();
+      periodLabel = `${sDay} ${sMonth} – ${eDay} ${eMonth} ${eYear} (30 Hari)`;
+
+      const slotsMap = new Map(slots.map((s) => [s.dateStr, s]));
+      transactions.forEach((tx) => {
+        const dKey = tx.date ? tx.date.split('T')[0] : '';
+        const item = slotsMap.get(dKey);
+        if (item) {
+          if (tx.type === 'income') item.income += tx.amount;
+          if (tx.type === 'expense') item.expense += tx.amount;
+          item.txCount += 1;
+          item.net = item.income - item.expense;
+        }
+      });
+    } else {
+      // 12 Months of Year View
+      const targetYear = today.getFullYear() - chartOffset;
+      periodLabel = `Tahun ${targetYear} (12 Bulan)`;
+
+      for (let m = 0; m < 12; m++) {
+        const monthShort = INDO_MONTHS_SHORT[m];
+        const monthFull = INDO_MONTHS_FULL[m];
+        slots.push({
+          key: `${targetYear}-${String(m + 1).padStart(2, '0')}`,
+          label: monthShort,
+          fullLabel: `${monthFull} ${targetYear}`,
+          dateStr: `${targetYear}-${String(m + 1).padStart(2, '0')}`,
+          income: 0,
+          expense: 0,
+          net: 0,
+          txCount: 0,
+          isHighlighted: targetYear === today.getFullYear() && m === today.getMonth(),
+        });
+      }
+
+      transactions.forEach((tx) => {
+        const txDate = new Date(tx.date);
+        if (!isNaN(txDate.getTime()) && txDate.getFullYear() === targetYear) {
+          const m = txDate.getMonth();
+          if (slots[m]) {
+            if (tx.type === 'income') slots[m].income += tx.amount;
+            if (tx.type === 'expense') slots[m].expense += tx.amount;
+            slots[m].txCount += 1;
+            slots[m].net = slots[m].income - slots[m].expense;
+          }
+        }
       });
     }
 
-    filteredTransactions.forEach((tx) => {
-      const dateKey = tx.date ? tx.date.split('T')[0] : '';
-      const entry = daysMap.get(dateKey);
-      if (entry) {
-        if (tx.type === 'income') entry.income += tx.amount;
-        if (tx.type === 'expense') entry.expense += tx.amount;
-      }
-    });
+    const totalInc = slots.reduce((sum, s) => sum + s.income, 0);
+    const totalExp = slots.reduce((sum, s) => sum + s.expense, 0);
+    const netCash = totalInc - totalExp;
 
-    return Array.from(daysMap.values());
-  }, [filteredTransactions]);
+    return {
+      chartSlots: slots,
+      chartPeriodLabel: periodLabel,
+      periodTotalIncome: totalInc,
+      periodTotalExpense: totalExp,
+      periodNetCashflow: netCash,
+    };
+  }, [chartTimeRange, chartOffset, transactions, INDO_DAYS_SHORT, INDO_DAYS_FULL, INDO_MONTHS_SHORT, INDO_MONTHS_FULL]);
 
   // Max value for chart scaling
   const maxChartValue = useMemo(() => {
-    const max = Math.max(...chartDays.map((d) => Math.max(d.income, d.expense)), 500000);
+    const max = Math.max(...chartSlots.map((d) => Math.max(d.income, d.expense)), 500000);
     return max * 1.18;
-  }, [chartDays]);
+  }, [chartSlots]);
 
   // Burn Rate calculations
   const daysInMonth = 31;
@@ -318,6 +479,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           {/* Right Period Filter */}
           <div className="flex items-center gap-1 bg-slate-100/90 dark:bg-slate-800/90 p-1.5 rounded-2xl border border-slate-200/70 dark:border-slate-700/70 self-start lg:self-auto overflow-x-auto max-w-full">
+            <button
+              onClick={() => setTimeRange('this_week')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                timeRange === 'this_week'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs border border-slate-200/80 dark:border-slate-700'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              Minggu Ini
+            </button>
             <button
               onClick={() => setTimeRange('this_month')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
@@ -618,75 +789,210 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* Main Dynamic Charts & Category Breakdown Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Cashflow Dynamic Chart */}
-        <div className="lg:col-span-2 fintech-card rounded-3xl p-6 flex flex-col justify-between transition-all">
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">Tren Arus Kas (14 Hari Terakhir)</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Visualisasi dinamis dinamika pemasukan vs pengeluaran</p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Chart Mode Toggle */}
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/70 dark:border-slate-700">
-                <button
-                  onClick={() => setChartView('area')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                    chartView === 'area'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  Kurva
-                </button>
-                <button
-                  onClick={() => setChartView('bar')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
-                    chartView === 'bar'
-                      ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                      : 'text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  Batang
-                </button>
+        <div className="lg:col-span-2 fintech-card rounded-3xl p-5 sm:p-6 flex flex-col justify-between transition-all">
+          <div className="flex flex-col gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                    {chartTimeRange === 'week' && 'Tren Arus Kas Mingguan'}
+                    {chartTimeRange === 'month' && 'Tren Arus Kas Bulanan'}
+                    {chartTimeRange === 'year' && 'Tren Arus Kas Tahunan'}
+                  </h2>
+                  <span className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/70 dark:border-indigo-800/70 px-2.5 py-0.5 rounded-full">
+                    {chartPeriodLabel}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                  Visualisasi pemasukan vs pengeluaran berbasis pilihan rentang waktu
+                </p>
               </div>
 
-              <div className="hidden sm:flex items-center gap-2 text-xs">
-                <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-                  Masuk
-                </span>
-                <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold rounded-full flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
-                  Keluar
-                </span>
+              {/* Action Controls: Navigation & Time Selector */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Period Navigator */}
+                <div className="flex items-center gap-1 bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200/70 dark:border-slate-700/70">
+                  <button
+                    onClick={() => setChartOffset((prev) => prev + 1)}
+                    className="p-1 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Mundur ke periode sebelumnya"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  {chartOffset !== 0 && (
+                    <button
+                      onClick={() => setChartOffset(0)}
+                      className="px-2 py-0.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 rounded-md shadow-xs transition-colors cursor-pointer"
+                      title="Kembali ke periode saat ini"
+                    >
+                      Saat Ini
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setChartOffset((prev) => Math.max(0, prev - 1))}
+                    disabled={chartOffset === 0}
+                    className={`p-1 rounded-lg transition-colors cursor-pointer ${
+                      chartOffset === 0
+                        ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700'
+                    }`}
+                    title="Maju ke periode selanjutnya"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Time Range Selector: Minggu, Bulan, Tahun */}
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                  <button
+                    onClick={() => {
+                      setChartTimeRange('week');
+                      setChartOffset(0);
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      chartTimeRange === 'week'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Minggu
+                  </button>
+                  <button
+                    onClick={() => {
+                      setChartTimeRange('month');
+                      setChartOffset(0);
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      chartTimeRange === 'month'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Bulan
+                  </button>
+                  <button
+                    onClick={() => {
+                      setChartTimeRange('year');
+                      setChartOffset(0);
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      chartTimeRange === 'year'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Tahun
+                  </button>
+                </div>
+
+                {/* Chart Mode Toggle */}
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/70 dark:border-slate-700">
+                  <button
+                    onClick={() => setChartView('area')}
+                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      chartView === 'area'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    Kurva
+                  </button>
+                  <button
+                    onClick={() => setChartView('bar')}
+                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      chartView === 'bar'
+                        ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                        : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    Batang
+                  </button>
+                </div>
+
+                {/* Legend Badges */}
+                <div className="hidden sm:flex items-center gap-1.5 text-xs">
+                  <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                    Masuk
+                  </span>
+                  <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold rounded-full flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block"></span>
+                    Keluar
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Period Financial Summary Strip */}
+            <div className="grid grid-cols-3 gap-2 p-2.5 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+              <div className="text-left">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  Pemasukan Periode
+                </div>
+                <div className="text-xs sm:text-sm font-black text-emerald-700 dark:text-emerald-400 font-mono mt-0.5 truncate">
+                  +{formatMoney(periodTotalIncome, true)}
+                </div>
+              </div>
+              <div className="text-left">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                  Pengeluaran Periode
+                </div>
+                <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white font-mono mt-0.5 truncate">
+                  -{formatMoney(periodTotalExpense, true)}
+                </div>
+              </div>
+              <div className="text-left">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                  <PiggyBank className="w-3 h-3" />
+                  Arus Kas Bersih
+                </div>
+                <div className={`text-xs sm:text-sm font-black font-mono mt-0.5 truncate ${periodNetCashflow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  {periodNetCashflow >= 0 ? `+${formatMoney(periodNetCashflow, true)}` : formatMoney(periodNetCashflow, true)}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Interactive Chart Container */}
-          <div className="mt-6 w-full h-64 relative">
+          <div className="mt-4 w-full h-64 relative">
             {hoveredChartDay && (
-              <div className="absolute top-2 right-4 z-20 bg-slate-900 text-white text-xs px-3 py-1.5 rounded-xl shadow-lg border border-slate-800 animate-in fade-in flex items-center gap-3">
-                <span className="font-bold text-slate-300">{hoveredChartDay.label}</span>
-                <span className="text-emerald-400 font-semibold">+{formatMoney(hoveredChartDay.income)}</span>
-                <span className="text-indigo-400 font-semibold">-{formatMoney(hoveredChartDay.expense)}</span>
+              <div className="absolute top-1 right-2 z-20 bg-slate-900/95 backdrop-blur-md text-white text-xs p-2.5 rounded-xl shadow-xl border border-slate-700 animate-in fade-in flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 pointer-events-none">
+                <div className="flex items-center gap-1.5 font-bold text-slate-200">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{hoveredChartDay.fullLabel}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 font-bold font-mono">+{formatMoney(hoveredChartDay.income)}</span>
+                  <span className="text-indigo-400 font-bold font-mono">-{formatMoney(hoveredChartDay.expense)}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md font-bold text-[10px] ${
+                      hoveredChartDay.net >= 0
+                        ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
+                        : 'bg-rose-950/80 text-rose-300 border border-rose-800/80'
+                    }`}
+                  >
+                    {hoveredChartDay.net >= 0 ? `+${formatMoney(hoveredChartDay.net, true)}` : formatMoney(hoveredChartDay.net, true)}
+                  </span>
+                </div>
               </div>
             )}
 
             <svg className="w-full h-full" viewBox="0 0 700 240" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="incomeAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10B981" stopOpacity="0.35" />
+                  <stop offset="0%" stopColor="#10B981" stopOpacity="0.32" />
                   <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
                 </linearGradient>
                 <linearGradient id="expenseAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366F1" stopOpacity="0.35" />
+                  <stop offset="0%" stopColor="#6366F1" stopOpacity="0.32" />
                   <stop offset="100%" stopColor="#6366F1" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
               {/* Grid Lines */}
-              {[0, 60, 120, 180].map((y, idx) => (
+              {[15, 70, 125, 180].map((y, idx) => (
                 <g key={idx}>
                   <line
                     x1="45"
@@ -698,8 +1004,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     strokeWidth="1"
                     className="dark:stroke-slate-800"
                   />
-                  <text x="40" y={y + 4} fill="#94A3B8" fontSize="10" fontWeight="600" textAnchor="end">
-                    {formatMoney(maxChartValue * ((180 - y) / 180), true)}
+                  <text x="40" y={y + 3.5} fill="#94A3B8" fontSize="10" fontWeight="600" textAnchor="end">
+                    {formatMoney(maxChartValue * ((180 - y) / 165), true)}
                   </text>
                 </g>
               ))}
@@ -709,15 +1015,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <>
                   {/* Income Area & Line */}
                   {(() => {
-                    const totalDays = chartDays.length;
-                    const slotWidth = (640 / (totalDays - 1 || 1));
-                    const points = chartDays.map((d, i) => {
+                    const totalSlots = chartSlots.length;
+                    const slotWidth = 635 / (totalSlots - 1 || 1);
+                    const points = chartSlots.map((d, i) => {
                       const x = 50 + i * slotWidth;
-                      const y = 180 - (maxChartValue > 0 ? (d.income / maxChartValue) * 180 : 0);
+                      const y = 180 - (maxChartValue > 0 ? (d.income / maxChartValue) * 165 : 0);
                       return `${x},${y}`;
                     });
                     const dLine = `M ${points.join(' L ')}`;
-                    const dArea = `M 50,180 L ${points.join(' L ')} L ${50 + (totalDays - 1) * slotWidth},180 Z`;
+                    const dArea = `M 50,180 L ${points.join(' L ')} L ${50 + (totalSlots - 1) * slotWidth},180 Z`;
 
                     return (
                       <g>
@@ -729,15 +1035,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                   {/* Expense Area & Line */}
                   {(() => {
-                    const totalDays = chartDays.length;
-                    const slotWidth = (640 / (totalDays - 1 || 1));
-                    const points = chartDays.map((d, i) => {
+                    const totalSlots = chartSlots.length;
+                    const slotWidth = 635 / (totalSlots - 1 || 1);
+                    const points = chartSlots.map((d, i) => {
                       const x = 50 + i * slotWidth;
-                      const y = 180 - (maxChartValue > 0 ? (d.expense / maxChartValue) * 180 : 0);
+                      const y = 180 - (maxChartValue > 0 ? (d.expense / maxChartValue) * 165 : 0);
                       return `${x},${y}`;
                     });
                     const dLine = `M ${points.join(' L ')}`;
-                    const dArea = `M 50,180 L ${points.join(' L ')} L ${50 + (totalDays - 1) * slotWidth},180 Z`;
+                    const dArea = `M 50,180 L ${points.join(' L ')} L ${50 + (totalSlots - 1) * slotWidth},180 Z`;
 
                     return (
                       <g>
@@ -749,48 +1055,86 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </>
               )}
 
-              {/* Bar View or Interactive Points */}
-              {chartDays.map((day, idx) => {
-                const totalDays = chartDays.length;
-                const slotWidth = (640 / totalDays);
+              {/* Bar or Points Rendering & Hover Zones */}
+              {chartSlots.map((day, idx) => {
+                const totalSlots = chartSlots.length;
+                const slotWidth = 635 / totalSlots;
                 const xBase = 50 + idx * slotWidth;
-                const barW = Math.max(8, slotWidth * 0.35);
 
-                const incomeH = maxChartValue > 0 ? (day.income / maxChartValue) * 180 : 0;
-                const expenseH = maxChartValue > 0 ? (day.expense / maxChartValue) * 180 : 0;
+                // Adjust bar sizes by timeframe
+                let barW = 14;
+                let barGap = 3;
+                if (chartTimeRange === 'week') {
+                  barW = 18;
+                  barGap = 4;
+                } else if (chartTimeRange === 'month') {
+                  barW = 6.5;
+                  barGap = 2;
+                } else {
+                  barW = 14;
+                  barGap = 3;
+                }
+
+                const barGroupWidth = barW * 2 + barGap;
+                const barStartX = xBase + Math.max(0, (slotWidth - barGroupWidth) / 2);
+
+                const incomeH = maxChartValue > 0 ? (day.income / maxChartValue) * 165 : 0;
+                const expenseH = maxChartValue > 0 ? (day.expense / maxChartValue) * 165 : 0;
 
                 const incomeY = 180 - incomeH;
                 const expenseY = 180 - expenseH;
 
+                const isHovered = hoveredChartDay?.key === day.key;
+
+                // Determine whether to show x-axis label to prevent overlap
+                let shouldShowLabel = true;
+                if (chartTimeRange === 'month') {
+                  // In 30 days view, show every 5 days + the first and last day
+                  shouldShowLabel = idx % 5 === 0 || idx === totalSlots - 1;
+                }
+
                 return (
                   <g
-                    key={`chart-day-${day.dateStr}-${idx}`}
+                    key={`chart-slot-${day.key}-${idx}`}
                     onMouseEnter={() => setHoveredChartDay(day)}
                     onMouseLeave={() => setHoveredChartDay(null)}
                     className="cursor-pointer"
                   >
+                    {/* Hover Highlight Column Background */}
+                    {isHovered && (
+                      <rect
+                        x={xBase}
+                        y={15}
+                        width={slotWidth}
+                        height={165}
+                        fill="currentColor"
+                        className="text-slate-200/50 dark:text-slate-800/40"
+                        rx="4"
+                      />
+                    )}
+
                     {chartView === 'bar' ? (
                       <>
                         {incomeH > 0 && (
                           <rect
-                            x={xBase}
+                            x={barStartX}
                             y={incomeY}
                             width={barW}
                             height={incomeH}
                             fill="#10B981"
-                            rx="4"
-                            className="transition-all hover:opacity-80"
+                            rx={chartTimeRange === 'month' ? 2 : 4}
+                            className={`transition-all ${isHovered ? 'opacity-100' : 'hover:opacity-90'}`}
                           />
                         )}
                         {expenseH > 0 && (
                           <rect
-                            x={xBase + barW + 2}
+                            x={barStartX + barW + barGap}
                             y={expenseY}
                             width={barW}
                             height={expenseH}
                             fill="#6366F1"
-                            rx="4"
-                            className="transition-all hover:opacity-80"
+                            rx={chartTimeRange === 'month' ? 2 : 4}
+                            className={`transition-all ${isHovered ? 'opacity-100' : 'hover:opacity-90'}`}
                           />
                         )}
                       </>
@@ -798,33 +1142,48 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <>
                         {/* Interactive Dot for Area Curve */}
                         <circle
-                          cx={50 + idx * (640 / (totalDays - 1 || 1))}
+                          cx={50 + idx * (635 / (totalSlots - 1 || 1))}
                           cy={incomeY}
-                          r={day.income > 0 ? 3.5 : 0}
+                          r={isHovered ? 5.5 : day.income > 0 ? (chartTimeRange === 'month' ? 2.5 : 3.5) : 0}
                           fill="#10B981"
-                          className="transition-all hover:r-5"
+                          stroke={isHovered ? '#ffffff' : 'none'}
+                          strokeWidth={isHovered ? 2 : 0}
+                          className="transition-all"
                         />
                         <circle
-                          cx={50 + idx * (640 / (totalDays - 1 || 1))}
+                          cx={50 + idx * (635 / (totalSlots - 1 || 1))}
                           cy={expenseY}
-                          r={day.expense > 0 ? 3.5 : 0}
+                          r={isHovered ? 5.5 : day.expense > 0 ? (chartTimeRange === 'month' ? 2.5 : 3.5) : 0}
                           fill="#6366F1"
-                          className="transition-all hover:r-5"
+                          stroke={isHovered ? '#ffffff' : 'none'}
+                          strokeWidth={isHovered ? 2 : 0}
+                          className="transition-all"
                         />
                       </>
                     )}
 
-                    {/* Day X-Axis Label */}
-                    <text
-                      x={xBase + barW}
-                      y="205"
-                      fill="#64748B"
-                      fontSize="10"
-                      fontWeight="bold"
-                      textAnchor="middle"
-                    >
-                      {day.label.split(' ')[0]}
-                    </text>
+                    {/* Transparent Full-Height Overlay for smooth hover targeting */}
+                    <rect
+                      x={xBase}
+                      y={0}
+                      width={slotWidth}
+                      height={185}
+                      fill="transparent"
+                    />
+
+                    {/* X-Axis Period Label */}
+                    {shouldShowLabel && (
+                      <text
+                        x={xBase + slotWidth / 2}
+                        y="205"
+                        fill={isHovered ? '#4F46E5' : '#64748B'}
+                        fontSize="10"
+                        fontWeight={isHovered || day.isHighlighted ? 'bold' : '600'}
+                        textAnchor="middle"
+                      >
+                        {day.label}
+                      </text>
+                    )}
                   </g>
                 );
               })}
@@ -835,14 +1194,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           {/* Footer Metrics */}
-          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between text-xs gap-3 text-slate-500 dark:text-slate-400 font-medium">
+          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between text-xs gap-3 text-slate-500 dark:text-slate-400 font-medium">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">🔥 Burn Rate Harian:</span>
-              <span className="text-rose-600 dark:text-rose-400 font-bold">{formatMoney(avgDailyExpense)} / hari</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {chartTimeRange === 'year' ? '📊 Rata-rata Pengeluaran:' : '🔥 Burn Rate Rata-rata:'}
+              </span>
+              <span className="text-rose-600 dark:text-rose-400 font-bold font-mono">
+                {formatMoney(
+                  chartTimeRange === 'year'
+                    ? Math.round(periodTotalExpense / 12)
+                    : Math.round(periodTotalExpense / (chartSlots.length || 1))
+                )}{' '}
+                / {chartTimeRange === 'year' ? 'bulan' : 'hari'}
+              </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">📅 Sisa Bulan Ini:</span>
-              <span className="text-slate-900 dark:text-white font-bold">{remainingDays} hari</span>
+              <span className="font-semibold text-slate-700 dark:text-slate-300">📅 Periode:</span>
+              <span className="text-slate-900 dark:text-white font-bold">{chartPeriodLabel}</span>
             </div>
           </div>
         </div>
