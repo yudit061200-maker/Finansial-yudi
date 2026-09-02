@@ -17,11 +17,8 @@ import {
   Search,
   CloudCheck,
   Palette,
-  User,
-  LogIn,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 
 export type NavTab = 'dashboard' | 'transactions' | 'debts' | 'budgets' | 'salary' | 'aichat' | 'receipt';
 
@@ -51,7 +48,6 @@ export const Header: React.FC<HeaderProps> = ({
   isDbConnected = true,
 }) => {
   const { theme, toggleTheme, paletteConfig, setIsThemeModalOpen } = useTheme();
-  const { user, isAuthenticated, setIsProfileModalOpen, setIsAuthModalOpen, setAuthModalMode } = useAuth();
 
   const tabLabels: Record<NavTab, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard Keuangan', subtitle: 'Ringkasan & Arus Kas Real-time' },
@@ -197,35 +193,6 @@ export const Header: React.FC<HeaderProps> = ({
               <Camera className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span className="hidden sm:inline">Scan Struk</span>
             </button>
-
-            {/* User Profile Pill / Login Trigger */}
-            {isAuthenticated && user ? (
-              <button
-                onClick={() => setIsProfileModalOpen(true)}
-                title={`Profil Pengguna: ${user.name} (@${user.username})`}
-                className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-100/90 dark:bg-slate-800/90 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200/80 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-800 transition-all cursor-pointer group"
-              >
-                <div
-                  className={`w-6 h-6 rounded-lg ${user.avatarColor || 'bg-indigo-600 text-white'} flex items-center justify-center font-black text-[11px] shadow-2xs`}
-                >
-                  {user.avatar || user.name.slice(0, 2).toUpperCase()}
-                </div>
-                <span className="hidden sm:inline text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 max-w-[90px] truncate">
-                  {user.name.split(' ')[0]}
-                </span>
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  setAuthModalMode('login');
-                  setIsAuthModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all cursor-pointer"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Masuk</span>
-              </button>
-            )}
 
             {/* Add Transaction Primary CTA */}
             <button

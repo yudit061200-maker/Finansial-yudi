@@ -169,36 +169,9 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "employeeName"]
-    },
-    "UserProfile": {
-      "title": "UserProfile",
-      "description": "Registered user profile and authentication data",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "username": { "type": "string" },
-        "email": { "type": "string" },
-        "passwordHash": { "type": "string" },
-        "role": { "type": "string" },
-        "avatar": { "type": "string" },
-        "avatarColor": { "type": "string" },
-        "phone": { "type": "string" },
-        "currencyPreference": { "type": "string" },
-        "monthlySalaryEstimate": { "type": "number" },
-        "notes": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "lastLoginAt": { "type": "string" },
-        "isDemo": { "type": "boolean" }
-      },
-      "required": ["id", "name", "username", "email", "role", "avatar", "avatarColor", "createdAt", "lastLoginAt"]
     }
   },
   "firestore": {
-    "/users/{userId}": {
-      "schema": "UserProfile",
-      "description": "User accounts and authentication profiles"
-    },
     "/accounts/{accountId}": {
       "schema": "Account",
       "description": "Bank and digital wallet accounts"

@@ -21,7 +21,6 @@ import {
   CompanySalaryProfile,
   WorkScheduleDay,
 } from '../types/salary';
-import { UserProfile } from '../types/user';
 import {
   INITIAL_ACCOUNTS,
   INITIAL_TRANSACTIONS,
@@ -35,7 +34,6 @@ import {
 
 // Firestore collection names
 const COLLECTIONS = {
-  USERS: 'users',
   ACCOUNTS: 'accounts',
   TRANSACTIONS: 'transactions',
   BUDGETS: 'budgets',
@@ -641,74 +639,6 @@ export async function saveSalarySettingsToFirestore(settings: { employeeName: st
     }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.SALARY_SETTINGS}/general`);
-  }
-}
-
-// User Profiles in Firestore
-export function subscribeUsers(onUpdate: (users: UserProfile[]) => void) {
-  const colRef = collection(db, COLLECTIONS.USERS);
-  return onSnapshot(
-    colRef,
-    (snapshot) => {
-      const items = snapshot.docs.map((d) => d.data() as UserProfile);
-      // Sort: demo accounts first or by createdAt
-      items.sort((a, b) => {
-        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return timeA - timeB;
-      });
-      onUpdate(items);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, COLLECTIONS.USERS);
-    }
-  );
-}
-
-export async function fetchUsersFromFirestore(): Promise<UserProfile[]> {
-  try {
-    const snap = await getDocs(collection(db, COLLECTIONS.USERS));
-    const items = snap.docs.map((d) => d.data() as UserProfile);
-    items.sort((a, b) => {
-      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return timeA - timeB;
-    });
-    return items;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, COLLECTIONS.USERS);
-    return [];
-  }
-}
-
-export async function saveUserToFirestore(user: UserProfile): Promise<void> {
-  try {
-    const ref = doc(db, COLLECTIONS.USERS, user.id);
-    await setDoc(ref, cleanForFirestore(user), { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `${COLLECTIONS.USERS}/${user.id}`);
-  }
-}
-
-export async function deleteUserFromFirestore(userId: string): Promise<void> {
-  try {
-    const ref = doc(db, COLLECTIONS.USERS, userId);
-    await deleteDoc(ref);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${COLLECTIONS.USERS}/${userId}`);
-  }
-}
-
-export async function seedUsersToFirestore(users: UserProfile[]): Promise<void> {
-  try {
-    const batch = writeBatch(db);
-    users.forEach((u) => {
-      const ref = doc(db, COLLECTIONS.USERS, u.id);
-      batch.set(ref, cleanForFirestore(u), { merge: true });
-    });
-    await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, COLLECTIONS.USERS);
   }
 }
 

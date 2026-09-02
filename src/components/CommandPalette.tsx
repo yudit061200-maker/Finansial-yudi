@@ -24,8 +24,6 @@ import { Account, Transaction, DebtRecord, FinancialGoal, Budget } from '../type
 import { NavTab } from './Header';
 import { formatRupiah, formatDateIndo } from '../utils/formatters';
 import { useTheme, ThemePalette } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
-import { User, LogIn, LogOut, Users } from 'lucide-react';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -60,7 +58,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const { theme, toggleTheme, palette, setPalette, paletteConfig, setIsThemeModalOpen } = useTheme();
-  const { user, isAuthenticated, setIsProfileModalOpen, setIsAuthModalOpen, setAuthModalMode, logout } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus input when opened
@@ -282,52 +279,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         run: () => {
           onClose();
           setPalette('sunset');
-        },
-      },
-      // Akun & Autentikasi Pengguna
-      {
-        id: 'user-profile',
-        title: user ? `Profil Pengguna: ${user.name}` : 'Buka Pengaturan Akun',
-        subtitle: user ? `Kelola profil, role (${user.role}), dan password` : 'Kelola profil akun web Anda',
-        icon: User,
-        category: 'Akun & Keamanan',
-        run: () => {
-          onClose();
-          setIsProfileModalOpen(true);
-        },
-      },
-      {
-        id: 'user-switch',
-        title: 'Beralih Akun / Multi-User Web',
-        subtitle: 'Ganti akun pengguna yang tersimpan di browser',
-        icon: Users,
-        category: 'Akun & Keamanan',
-        run: () => {
-          onClose();
-          setIsProfileModalOpen(true);
-        },
-      },
-      {
-        id: 'user-register-new',
-        title: 'Daftar Akun Baru (Web Storage)',
-        subtitle: 'Buat akun pengguna baru tanpa perlu Firebase Console',
-        icon: LogIn,
-        category: 'Akun & Keamanan',
-        run: () => {
-          onClose();
-          setAuthModalMode('register');
-          setIsAuthModalOpen(true);
-        },
-      },
-      {
-        id: 'user-logout',
-        title: 'Keluar Akun (Logout)',
-        subtitle: 'Akhiri sesi login pengguna aktif',
-        icon: LogOut,
-        category: 'Akun & Keamanan',
-        run: () => {
-          onClose();
-          logout();
         },
       },
     ];

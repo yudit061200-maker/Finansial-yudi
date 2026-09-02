@@ -24,14 +24,9 @@ import {
   TrendingUp,
   X,
   Palette,
-  User,
-  LogIn,
-  LogOut,
-  ChevronDown,
 } from 'lucide-react';
 import { NavTab } from './Header';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import { formatRupiah, formatRupiahShort } from '../utils/formatters';
 
 interface SidebarProps {
@@ -70,7 +65,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { theme, toggleTheme, paletteConfig, setIsThemeModalOpen } = useTheme();
-  const { user, isAuthenticated, setIsProfileModalOpen, setIsAuthModalOpen, setAuthModalMode } = useAuth();
 
   const formatMoney = (amount: number) => {
     if (isPrivacyMode) return 'Rp ••••••••';
@@ -305,53 +299,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </div>
 
-      {/* 5. Footer: User Profile, Firestore Sync, Android App, Theme & Reset */}
+      {/* 5. Footer: Android App, Theme Toggle, Real-time Sync & Reset */}
       <div className="p-3 border-t border-slate-200/80 dark:border-slate-800/80 space-y-2 bg-slate-50/70 dark:bg-slate-900/50">
-        
-        {/* User Card Widget */}
-        {isAuthenticated && user ? (
-          <div
-            onClick={() => {
-              if (isOpenMobile && onCloseMobile) onCloseMobile();
-              setIsProfileModalOpen(true);
-            }}
-            className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-800 transition-all cursor-pointer group shadow-2xs"
-            title="Kelola Profil Pengguna & Multi-Akun"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div
-                className={`w-8 h-8 rounded-xl ${user.avatarColor || 'bg-indigo-600 text-white'} flex items-center justify-center font-black text-xs shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}
-              >
-                {user.avatar || user.name.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
-                    {user.name}
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                  {user.role || user.email}
-                </p>
-              </div>
-            </div>
-
-            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
-          </div>
-        ) : (
-          <button
-            onClick={() => {
-              if (isOpenMobile && onCloseMobile) onCloseMobile();
-              setAuthModalMode('login');
-              setIsAuthModalOpen(true);
-            }}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-sm transition-all cursor-pointer"
-          >
-            <LogIn className="w-4 h-4" />
-            <span>Masuk / Daftar Akun Web</span>
-          </button>
-        )}
-
         {/* Firestore Real-time status */}
         <div className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 text-[11px]">
           <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold">

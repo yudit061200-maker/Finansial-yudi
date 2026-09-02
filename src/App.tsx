@@ -48,27 +48,14 @@ import { AndroidBottomNav } from './components/AndroidBottomNav';
 import { AndroidInstallModal } from './components/AndroidInstallModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ThemeSelectorModal } from './components/ThemeSelectorModal';
-import { AuthModal } from './components/AuthModal';
-import { UserProfileModal } from './components/UserProfileModal';
-import { LoginScreen } from './components/LoginScreen';
 import { useTheme } from './context/ThemeContext';
-import { useAuth } from './context/AuthContext';
 import { getCashSummary } from './utils/cashflow';
 import { isDebtPaid, formatRupiah } from './utils/formatters';
-import { RotateCcw, Check, CloudCheck, Loader2, Smartphone, TrendingUp } from 'lucide-react';
+import { RotateCcw, Check, CloudCheck, Loader2, Smartphone } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const { isThemeModalOpen, setIsThemeModalOpen } = useTheme();
-  const {
-    user,
-    isAuthenticated,
-    isLoading: isAuthLoading,
-    isAuthModalOpen,
-    setIsAuthModalOpen,
-    isProfileModalOpen,
-    setIsProfileModalOpen,
-  } = useAuth();
 
   // Privacy Mode (hide/show sensitive amounts)
   const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => {
@@ -576,28 +563,6 @@ export default function App() {
     }
   };
 
-  // Status pengecekan sesi login saat pertama kali halaman dimuat
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-[#080C14] text-slate-900 dark:text-white p-4">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/25 animate-pulse">
-            <TrendingUp className="w-6 h-6" />
-          </div>
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300">
-            <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-            <span>Memeriksa autentikasi pengguna...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // GATEKEEPER: Harus login terlebih dahulu baru bisa membuka tampilan data web
-  if (!isAuthenticated || !user) {
-    return <LoginScreen />;
-  }
-
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-[#0B0F19] bg-mesh-light dark:bg-mesh-dark text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-300">
       {/* Executive Desktop & Mobile Drawer Sidebar */}
@@ -890,19 +855,6 @@ export default function App() {
       <ThemeSelectorModal
         isOpen={isThemeModalOpen}
         onClose={() => setIsThemeModalOpen(false)}
-      />
-
-      {/* Web Authentication Modal (Beralih atau Registrasi Akun Tambahan) */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        isForcedLogin={false}
-      />
-
-      {/* User Profile & Multi-Account Switcher Modal */}
-      <UserProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
       />
 
       {/* Global Toast Notification */}
