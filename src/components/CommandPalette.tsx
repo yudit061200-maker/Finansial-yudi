@@ -341,13 +341,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-6 bg-slate-950/60 backdrop-blur-md flex min-h-full items-start justify-center pt-10 sm:pt-16 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-3xl my-auto bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search input header */}
-        <div className="flex items-center px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 gap-3">
+        <div className="flex items-center px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 gap-3 shrink-0">
           <Search className="w-5 h-5 text-slate-400 dark:text-slate-500 shrink-0" />
           <input
             ref={inputRef}
@@ -374,7 +377,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Results Container */}
-        <div className="overflow-y-auto p-2 space-y-4 flex-1 scrollbar-none">
+        <div className="overflow-y-auto overscroll-contain p-2 space-y-4 flex-1 modal-scroll">
           {/* Section: Accounts matches */}
           {filteredAccounts.length > 0 && (
             <div>

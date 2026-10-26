@@ -1609,14 +1609,16 @@ export const SalaryCalculator: React.FC<SalaryCalculatorProps> = ({
       {companyToDelete && (
         <div
           id="modal-confirm-delete-backdrop"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-6 bg-slate-900/70 backdrop-blur-sm flex min-h-full items-center justify-center animate-in fade-in"
+          onClick={() => setCompanyToDelete(null)}
         >
           <div
             id="modal-confirm-delete-container"
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full my-auto shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[92vh] overflow-y-auto overscroll-contain modal-scroll"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-2xl">
+              <div className="p-3 bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 rounded-2xl shrink-0">
                 <Trash2 className="w-6 h-6" />
               </div>
               <div>

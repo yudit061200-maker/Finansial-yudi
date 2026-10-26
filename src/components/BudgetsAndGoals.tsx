@@ -630,87 +630,102 @@ export const BudgetsAndGoals: React.FC<BudgetsAndGoalsProps> = ({
 
       {/* Modal 1: Add/Edit Budget */}
       {showBudgetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 transition-colors">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                {editingBudget ? 'Edit Batas Anggaran Kategori' : 'Atur Batas Anggaran Kategori'}
-              </h3>
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center animate-in fade-in">
+          <div className="fixed inset-0 -z-10" onClick={() => { setShowBudgetModal(false); setEditingBudget(null); }} aria-hidden="true" />
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden transition-colors">
+            {/* Pinned Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {editingBudget ? 'Edit Batas Anggaran Kategori' : 'Atur Batas Anggaran Kategori'}
+                </h3>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Mode Landscape
+                </span>
+              </div>
               <button
                 onClick={() => {
                   setShowBudgetModal(false);
                   setEditingBudget(null);
                 }}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Kategori Pengeluaran
-              </label>
-              <select
-                value={budgetCategory}
-                onChange={(e) => setBudgetCategory(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-              >
-                {DEFAULT_CATEGORIES.expense.map((c) => (
-                  <option key={c.name} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Scrollable Body in Landscape 2-Column Grid */}
+            <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-4 modal-scroll">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Kategori Pengeluaran
+                  </label>
+                  <select
+                    value={budgetCategory}
+                    onChange={(e) => setBudgetCategory(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                  >
+                    {DEFAULT_CATEGORIES.expense.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Batas Pengeluaran Bulanan (IDR)
-              </label>
-              <input
-                type="number"
-                value={budgetLimit}
-                onChange={(e) => setBudgetLimit(e.target.value)}
-                placeholder="Contoh: 2500000"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-              />
-            </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Batas Pengeluaran Bulanan (IDR)
+                  </label>
+                  <input
+                    type="number"
+                    value={budgetLimit}
+                    onChange={(e) => setBudgetLimit(e.target.value)}
+                    placeholder="Contoh: 2500000"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Ambang Peringatan Overbudget (%)
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min="50"
-                  max="100"
-                  value={budgetThreshold}
-                  onChange={(e) => setBudgetThreshold(e.target.value)}
-                  placeholder="85"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-                />
-                <span className="text-xs text-slate-500 font-bold">%</span>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Ambang Peringatan Overbudget (%)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="50"
+                      max="100"
+                      value={budgetThreshold}
+                      onChange={(e) => setBudgetThreshold(e.target.value)}
+                      placeholder="85"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    />
+                    <span className="text-xs text-slate-500 font-bold">%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Peringatan kuning akan muncul ketika pengeluaran mencapai persentase ini.
+                  </p>
+                </div>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Peringatan kuning akan muncul ketika pengeluaran mencapai persentase ini.
-              </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            {/* Pinned Footer */}
+            <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex items-center justify-between sm:justify-end gap-3 shrink-0">
               <button
+                type="button"
                 onClick={() => {
                   setShowBudgetModal(false);
                   setEditingBudget(null);
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleSaveBudget}
-                className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white transition-all font-bold cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none"
+                className="px-5 py-2.5 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white transition-all font-bold cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none"
               >
                 {editingBudget ? 'Simpan Perubahan' : 'Simpan Anggaran'}
               </button>
@@ -721,121 +736,138 @@ export const BudgetsAndGoals: React.FC<BudgetsAndGoalsProps> = ({
 
       {/* Modal 2: Add/Edit Goal */}
       {showGoalModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 transition-colors">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                {editingGoal ? 'Edit Target Tabungan' : 'Buat Target Tabungan Baru'}
-              </h3>
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center animate-in fade-in">
+          <div className="fixed inset-0 -z-10" onClick={() => { setShowGoalModal(false); setEditingGoal(null); }} aria-hidden="true" />
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden transition-colors">
+            {/* Pinned Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {editingGoal ? 'Edit Target Tabungan' : 'Buat Target Tabungan Baru'}
+                </h3>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Mode Landscape
+                </span>
+              </div>
               <button
                 onClick={() => {
                   setShowGoalModal(false);
                   setEditingGoal(null);
                 }}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Nama / Judul Target
-              </label>
-              <input
-                type="text"
-                value={goalTitle}
-                onChange={(e) => setGoalTitle(e.target.value)}
-                placeholder="Contoh: Liburan ke Labuan Bajo, DP Mobil, Dana Darurat 6 Bulan"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-              />
+            {/* Scrollable Body in Landscape 2-Column Grid */}
+            <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-4 modal-scroll">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Left Column: Title, Category, Target Date */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Nama / Judul Target <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={goalTitle}
+                      onChange={(e) => setGoalTitle(e.target.value)}
+                      placeholder="Contoh: Liburan ke Labuan Bajo, DP Mobil, Dana Darurat 6 Bulan"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Kategori Target
+                    </label>
+                    <select
+                      value={goalCategory}
+                      onChange={(e) => setGoalCategory(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    >
+                      {GOAL_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Target Tanggal Dicapai
+                    </label>
+                    <input
+                      type="date"
+                      value={goalTargetDate}
+                      onChange={(e) => setGoalTargetDate(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Right Column: Target Amount, Saved Amount, Monthly Target */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Nominal Target (IDR) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={goalTargetAmount}
+                      onChange={(e) => setGoalTargetAmount(e.target.value)}
+                      placeholder="20000000"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Saldo Terkumpul Saat Ini (IDR)
+                    </label>
+                    <input
+                      type="number"
+                      value={goalCurrentAmount}
+                      onChange={(e) => setGoalCurrentAmount(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Target Nabung/Bulan (IDR)
+                    </label>
+                    <input
+                      type="number"
+                      value={goalMonthlyTarget}
+                      onChange={(e) => setGoalMonthlyTarget(e.target.value)}
+                      placeholder="Otomatis dihitung"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Kategori Target
-              </label>
-              <select
-                value={goalCategory}
-                onChange={(e) => setGoalCategory(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-              >
-                {GOAL_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Nominal Target (IDR)
-                </label>
-                <input
-                  type="number"
-                  value={goalTargetAmount}
-                  onChange={(e) => setGoalTargetAmount(e.target.value)}
-                  placeholder="20000000"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Saldo Terkumpul (IDR)
-                </label>
-                <input
-                  type="number"
-                  value={goalCurrentAmount}
-                  onChange={(e) => setGoalCurrentAmount(e.target.value)}
-                  placeholder="0"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Target Tanggal Dicapai
-                </label>
-                <input
-                  type="date"
-                  value={goalTargetDate}
-                  onChange={(e) => setGoalTargetDate(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Target Nabung/Bulan (IDR)
-                </label>
-                <input
-                  type="number"
-                  value={goalMonthlyTarget}
-                  onChange={(e) => setGoalMonthlyTarget(e.target.value)}
-                  placeholder="Otomatis dihitung"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            {/* Pinned Footer */}
+            <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex items-center justify-between sm:justify-end gap-3 shrink-0">
               <button
+                type="button"
                 onClick={() => {
                   setShowGoalModal(false);
                   setEditingGoal(null);
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleSaveGoal}
-                className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white transition-all font-bold cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none"
+                className="px-5 py-2.5 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white transition-all font-bold cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none"
               >
                 {editingGoal ? 'Simpan Perubahan' : 'Buat Target'}
               </button>
@@ -846,60 +878,70 @@ export const BudgetsAndGoals: React.FC<BudgetsAndGoalsProps> = ({
 
       {/* Modal 3: Contribute to Goal */}
       {showContributeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 transition-colors">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Tambah Tabungan: {showContributeModal.title}
-              </h3>
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center animate-in fade-in">
+          <div className="fixed inset-0 -z-10" onClick={() => setShowContributeModal(null)} aria-hidden="true" />
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden transition-colors">
+            {/* Pinned Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Tambah Tabungan: {showContributeModal.title}
+                </h3>
+              </div>
               <button
                 onClick={() => setShowContributeModal(null)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Nominal yang Ditabung (IDR)
-              </label>
-              <input
-                type="number"
-                value={contributeAmount}
-                onChange={(e) => setContributeAmount(e.target.value)}
-                placeholder="Contoh: 1000000"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-              />
+            {/* Scrollable Body */}
+            <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-4 modal-scroll">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Nominal yang Ditabung (IDR)
+                </label>
+                <input
+                  type="number"
+                  value={contributeAmount}
+                  onChange={(e) => setContributeAmount(e.target.value)}
+                  placeholder="Contoh: 1000000"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Sumber Dana Rekening / Dompet:
+                </label>
+                <select
+                  value={contributeAccountId}
+                  onChange={(e) => setContributeAccountId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                >
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} (Saldo: {formatRupiah(acc.balance)})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Sumber Dana Rekening / Dompet:
-              </label>
-              <select
-                value={contributeAccountId}
-                onChange={(e) => setContributeAccountId(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
-              >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.name} (Saldo: {formatRupiah(acc.balance)})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            {/* Pinned Footer */}
+            <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex items-center justify-between sm:justify-end gap-3 shrink-0">
               <button
+                type="button"
                 onClick={() => setShowContributeModal(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleSaveContribution}
-                className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white transition-all font-bold cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none"
+                className="px-5 py-2.5 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white transition-all font-bold cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none"
               >
                 Setor Tabungan
               </button>

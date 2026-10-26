@@ -2063,19 +2063,22 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
       {/* POPUP MODAL ON LONG PRESS / CLICK DATE: SISA UANG & DAFTAR TRANSAKSI */}
       {popupModalDate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-6 bg-slate-950/70 backdrop-blur-sm flex min-h-full items-center justify-center animate-in fade-in duration-200"
           onClick={() => setPopupModalDate(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-4xl my-auto max-h-[92vh] sm:max-h-[88vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-800/50 shrink-0">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs uppercase font-black text-indigo-600 dark:text-indigo-400 tracking-wider">
                     Rincian Tanggal & Sisa Kas
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    Mode Landscape
                   </span>
                   {popupModalDate === todayStr && (
                     <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300">
@@ -2108,7 +2111,7 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+            <div className="p-5 space-y-4 overflow-y-auto overscroll-contain flex-1 modal-scroll">
               {/* Highlight Card: Perkiraan Sisa Saldo Kas */}
               <div
                 className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
@@ -2366,7 +2369,7 @@ export const PaymentCalendar: React.FC<PaymentCalendarProps> = ({
             </div>
 
             {/* Modal Footer Actions */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex items-center justify-between gap-2 flex-wrap">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex items-center justify-between gap-2 flex-wrap shrink-0">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {

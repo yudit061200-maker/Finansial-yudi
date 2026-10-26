@@ -2030,17 +2030,24 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
       {isPaymentModalOpen && activePaymentDebt && (() => {
         const calculatedLateFeeInfo = calculateLateFeeAndOverdue(activePaymentDebt, new Date(paymentDate));
         return (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 transition-colors">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center">
+          <div className="fixed inset-0 -z-10" onClick={() => setIsPaymentModalOpen(false)} aria-hidden="true" />
+          <div className="relative bg-white dark:bg-slate-900 rounded-3xl max-w-3xl md:max-w-4xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 transition-colors">
+            {/* Pinned Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
               <div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                  {activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment
-                    ? 'Bayar Angsuran Kredit Barang'
-                    : activePaymentDebt.type === 'payable'
-                    ? 'Catat Pembayaran Hutang'
-                    : 'Catat Penerimaan Piutang'}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                    {activePaymentDebt.type === 'installment' || activePaymentDebt.isInstallment
+                      ? 'Bayar Angsuran Kredit Barang'
+                      : activePaymentDebt.type === 'payable'
+                      ? 'Catat Pembayaran Hutang'
+                      : 'Catat Penerimaan Piutang'}
+                  </h3>
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    Mode Landscape
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {activePaymentDebt.itemName || activePaymentDebt.title} • {activePaymentDebt.personName}
                 </p>
@@ -2053,8 +2060,13 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
               </button>
             </div>
 
-            {/* Quick Balance Status */}
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl text-xs space-y-2">
+            {/* Scrollable Body in Landscape 2-Column Grid */}
+            <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-4 modal-scroll">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Left Column: Quick Balance & Late Fees */}
+                <div className="space-y-3">
+                  {/* Quick Balance Status */}
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80 rounded-2xl text-xs space-y-2">
               <div className="flex justify-between text-slate-500 dark:text-slate-400">
                 <span>Total Kewajiban:</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(activePaymentDebt.totalAmount)}</span>
@@ -2172,9 +2184,11 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 </div>
               </div>
             )}
+                </div>
 
-            <div className="space-y-3 text-xs">
-              <div>
+                {/* Right Column: Payment Inputs & Summaries */}
+                <div className="space-y-3 text-xs">
+                  <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Nominal Pokok Angsuran (Rp)
                 </label>
@@ -2355,14 +2369,17 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                   onChange={(e) => setSyncWithTransaction(e.target.checked)}
                   className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer"
                 />
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            {/* Pinned Footer */}
+            <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex gap-2 justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => setIsPaymentModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
               >
                 Batal
               </button>
@@ -2370,7 +2387,7 @@ export const DebtReceivable: React.FC<DebtReceivableProps> = ({
                 type="button"
                 onClick={handleSavePayment}
                 disabled={paymentAmount <= 0}
-                className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-200 dark:shadow-none transition-all cursor-pointer disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm shadow-indigo-200 dark:shadow-none transition-all cursor-pointer disabled:opacity-50"
               >
                 Konfirmasi Pembayaran
               </button>
@@ -2544,16 +2561,22 @@ const InstallmentCalculatorModal: React.FC<InstallmentCalculatorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 border border-slate-100 dark:border-slate-800 my-8 animate-in fade-in zoom-in-95 transition-colors">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center">
+      <div className="fixed inset-0 -z-10" onClick={onClose} aria-hidden="true" />
+      <div className="relative bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 transition-colors">
+        {/* Pinned Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
               <Calculator className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900 dark:text-white">Kalkulator Simulasi Kredit Barang</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">Kalkulator Simulasi Kredit Barang</h3>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Mode Landscape
+                </span>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Hitung angsuran bulanan, bunga, dan pantau progres berapa bulan cicilan sudah dibayar.
               </p>
@@ -2566,6 +2589,9 @@ const InstallmentCalculatorModal: React.FC<InstallmentCalculatorModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Scrollable Body */}
+        <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-4 modal-scroll">
 
         {/* Form Inputs Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -2776,19 +2802,21 @@ const InstallmentCalculatorModal: React.FC<InstallmentCalculatorModalProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        </div>
+
+        {/* Pinned Action Buttons Footer */}
+        <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex gap-2 justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+            className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
           >
             Tutup
           </button>
           <button
             type="button"
             onClick={handleSaveToDebtList}
-            className="flex-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 dark:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
+            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 dark:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
           >
             <Check className="w-4 h-4" />
             <span>Simpan ke Daftar Cicilan Saya</span>
@@ -3014,14 +3042,20 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-100 dark:border-slate-800 my-8 animate-in fade-in zoom-in-95 transition-colors">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center">
+      <div className="fixed inset-0 -z-10" onClick={onClose} aria-hidden="true" />
+      <div className="relative bg-white dark:bg-slate-900 rounded-3xl max-w-3xl md:max-w-4xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 transition-colors">
+        {/* Pinned Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
           <div>
-            <h3 className="font-bold text-base text-slate-900 dark:text-white">
-              {editingDebt ? 'Edit Catatan Kewajiban / Kredit' : 'Tambah Catatan Baru'}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                {editingDebt ? 'Edit Catatan Kewajiban / Kredit' : 'Tambah Catatan Baru'}
+              </h3>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                Mode Landscape
+              </span>
+            </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Pilih tipe kredit barang, hutang pinjaman, atau piutang.
             </p>
@@ -3034,7 +3068,9 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden text-xs">
+          {/* Scrollable Body */}
+          <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-4 modal-scroll">
           {/* Type Selector (3 options) */}
           <div className="grid grid-cols-3 gap-2 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl">
             <button
@@ -3563,18 +3599,20 @@ const DebtFormModal: React.FC<DebtFormModalProps> = ({
             </div>
           )}
 
-          {/* Buttons */}
-          <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          </div>
+
+          {/* Pinned Action Buttons Footer */}
+          <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex gap-2 justify-end shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+              className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="flex-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 dark:shadow-none transition-all cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-200 dark:shadow-none transition-all cursor-pointer"
             >
               Simpan Data
             </button>
@@ -3655,10 +3693,11 @@ export const DebtNotesModal: React.FC<DebtNotesModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 border border-slate-100 dark:border-slate-800 my-8 animate-in fade-in zoom-in-95 transition-colors">
-        {/* Modal Header */}
-        <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3.5">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center">
+      <div className="fixed inset-0 -z-10" onClick={onClose} aria-hidden="true" />
+      <div className="relative bg-white dark:bg-slate-900 rounded-3xl max-w-3xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 transition-colors">
+        {/* Pinned Header */}
+        <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
               <NotebookPen className="w-5 h-5" />
@@ -3685,8 +3724,10 @@ export const DebtNotesModal: React.FC<DebtNotesModalProps> = ({
           </button>
         </div>
 
-        {/* Form Tambah Catatan Baru */}
-        <form onSubmit={handleAdd} className="p-4 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3">
+        {/* Scrollable Body */}
+        <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-4 modal-scroll">
+          {/* Form Tambah Catatan Baru */}
+          <form onSubmit={handleAdd} className="p-4 bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
               <Plus className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -3821,13 +3862,14 @@ export const DebtNotesModal: React.FC<DebtNotesModalProps> = ({
             </div>
           )}
         </div>
+        </div>
 
-        {/* Footer */}
-        <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+        {/* Pinned Footer */}
+        <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors cursor-pointer"
           >
             Tutup
           </button>

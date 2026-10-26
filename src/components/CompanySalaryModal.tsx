@@ -209,11 +209,12 @@ export const CompanySalaryModal: React.FC<CompanySalaryModalProps> = ({
   return (
     <div
       id="modal-company-salary-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-6 bg-slate-900/70 backdrop-blur-sm flex min-h-full items-center justify-center animate-in fade-in duration-200"
     >
+      <div className="fixed inset-0 -z-10" onClick={onClose} aria-hidden="true" />
       <div
         id="modal-company-salary-container"
-        className="relative w-full max-w-3xl max-h-[92vh] flex flex-col bg-white dark:bg-[#0F172A] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+        className="relative w-full max-w-4xl my-auto max-h-[92vh] sm:max-h-[88vh] flex flex-col bg-white dark:bg-[#0F172A] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
       >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50">
@@ -222,12 +223,17 @@ export const CompanySalaryModal: React.FC<CompanySalaryModalProps> = ({
               <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                {isEditing ? 'Edit Data Gaji Perusahaan' : 'Tambah Perusahaan Baru'}
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${currentColorMeta.bg} ${currentColorMeta.text} border ${currentColorMeta.border}`}>
-                  {formData.companyName || 'Nama Perusahaan'}
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  {isEditing ? 'Edit Data Gaji Perusahaan' : 'Tambah Perusahaan Baru'}
+                  <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${currentColorMeta.bg} ${currentColorMeta.text} border ${currentColorMeta.border}`}>
+                    {formData.companyName || 'Nama Perusahaan'}
+                  </span>
+                </h2>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Mode Landscape
                 </span>
-              </h2>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Konfigurasi sistem penggajian: <strong>Gaji Pokok + Daily Rate (Upah Harian)</strong>, tunjangan, cut-off, BPJS & PPh 21.
               </p>
@@ -284,7 +290,7 @@ export const CompanySalaryModal: React.FC<CompanySalaryModalProps> = ({
         </div>
 
         {/* Modal Form Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-6 modal-scroll">
           {/* Identity & Badge Row (Always Visible) */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
             <div className="md:col-span-5 space-y-1.5">

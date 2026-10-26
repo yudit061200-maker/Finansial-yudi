@@ -589,22 +589,29 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
       {selectedDate && selectedDayData && (
         <div
           id="modal-date-detail-backdrop"
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-6 bg-slate-900/70 backdrop-blur-xs flex min-h-full items-center justify-center animate-in fade-in"
+          onClick={() => setSelectedDate(null)}
         >
           <div
             id="modal-date-detail-content"
-            className="w-full max-w-xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-4xl my-auto bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+            {/* Modal Header (Pinned shrink-0) */}
+            <div className="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
                   <CalendarIcon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Atur Presensi: {selectedDayData.dayNumber} {monthNames[selectedDayData.month - 1]} {selectedDayData.year}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Atur Presensi: {selectedDayData.dayNumber} {monthNames[selectedDayData.month - 1]} {selectedDayData.year}
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      Mode Landscape
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500">
                     {selectedDayData.holidayName ? `Hari Libur: ${selectedDayData.holidayName}` : 'Pilih status kerja dan lembur untuk setiap perusahaan.'}
                   </p>
@@ -613,154 +620,158 @@ export const WorkScheduleCalendar: React.FC<WorkScheduleCalendarProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedDate(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                title="Tutup Modal"
               >
                 ✕
               </button>
             </div>
 
-            {/* List of Companies Assignment Controls */}
-            <div className="space-y-4">
-              {companies.map((comp) => {
-                const assignment = selectedDayData.assignments[comp.id] || { status: 'off', overtimeHours: 0 };
-                const compColor = BADGE_COLOR_MAP[comp.badgeColor] || BADGE_COLOR_MAP.indigo;
+            {/* List of Companies Assignment Controls (Scrollable modal-scroll) */}
+            <div className="p-5 sm:p-6 overflow-y-auto overscroll-contain flex-1 modal-scroll">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {companies.map((comp) => {
+                  const assignment = selectedDayData.assignments[comp.id] || { status: 'off', overtimeHours: 0 };
+                  const compColor = BADGE_COLOR_MAP[comp.badgeColor] || BADGE_COLOR_MAP.indigo;
 
-                return (
-                  <div
-                    key={comp.id}
-                    className={`p-4 rounded-2xl border ${compColor.bg} ${compColor.border} space-y-3`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`text-xs font-bold flex items-center gap-2 ${compColor.text}`}>
-                        <span className={`w-2.5 h-2.5 rounded-full ${compColor.dot}`}></span>
-                        {comp.companyName}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono">
-                        Pokok + Daily {formatRupiah(comp.dailyRate)}/hr
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                        Status Presensi Hari Ini:
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated: WorkScheduleDay = {
-                              ...selectedDayData,
-                              assignments: {
-                                ...selectedDayData.assignments,
-                                [comp.id]: {
-                                  ...assignment,
-                                  status: 'work',
-                                  shiftName: 'Kerja',
-                                },
-                              },
-                            };
-                            onUpdateScheduleDay(selectedDate, updated);
-                          }}
-                          className={`px-3 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                            assignment.status === 'work' || assignment.status === 'overtime' || assignment.status === 'half_day'
-                              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-2 ring-emerald-500'
-                              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-emerald-400'
-                          }`}
-                        >
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                          <span>Kerja (Masuk)</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated: WorkScheduleDay = {
-                              ...selectedDayData,
-                              assignments: {
-                                ...selectedDayData.assignments,
-                                [comp.id]: {
-                                  ...assignment,
-                                  status: 'off',
-                                  shiftName: 'Libur',
-                                },
-                              },
-                            };
-                            onUpdateScheduleDay(selectedDate, updated);
-                          }}
-                          className={`px-3 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                            assignment.status === 'off' || assignment.status === 'leave' || assignment.status === 'sick'
-                              ? 'bg-slate-800 dark:bg-slate-700 text-white shadow-md ring-2 ring-slate-400'
-                              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
-                          }`}
-                        >
-                          <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-                          <span>Libur (Off)</span>
-                        </button>
+                  return (
+                    <div
+                      key={comp.id}
+                      className={`p-4 rounded-2xl border ${compColor.bg} ${compColor.border} space-y-3 flex flex-col justify-between`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-bold flex items-center gap-2 ${compColor.text}`}>
+                          <span className={`w-2.5 h-2.5 rounded-full ${compColor.dot}`}></span>
+                          {comp.companyName}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono">
+                          Pokok + Daily {formatRupiah(comp.dailyRate)}/hr
+                        </span>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-1">
                       <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">
-                          Jam Lembur (Overtime):
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
+                          Status Presensi Hari Ini:
                         </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="16"
-                          value={assignment.overtimeHours || 0}
-                          onChange={(e) => {
-                            const ot = Number(e.target.value) || 0;
-                            onUpdateScheduleDay(selectedDate, {
-                              ...selectedDayData,
-                              assignments: {
-                                ...selectedDayData.assignments,
-                                [comp.id]: {
-                                  ...assignment,
-                                  overtimeHours: ot,
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated: WorkScheduleDay = {
+                                ...selectedDayData,
+                                assignments: {
+                                  ...selectedDayData.assignments,
+                                  [comp.id]: {
+                                    ...assignment,
+                                    status: 'work',
+                                    shiftName: 'Kerja',
+                                  },
                                 },
-                              },
-                            });
-                          }}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                        />
+                              };
+                              onUpdateScheduleDay(selectedDate, updated);
+                            }}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                              assignment.status === 'work' || assignment.status === 'overtime' || assignment.status === 'half_day'
+                                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-2 ring-emerald-500'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                            }`}
+                          >
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                            <span>Kerja</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated: WorkScheduleDay = {
+                                ...selectedDayData,
+                                assignments: {
+                                  ...selectedDayData.assignments,
+                                  [comp.id]: {
+                                    ...assignment,
+                                    status: 'off',
+                                    shiftName: 'Libur',
+                                  },
+                                },
+                              };
+                              onUpdateScheduleDay(selectedDate, updated);
+                            }}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                              assignment.status === 'off' || assignment.status === 'leave' || assignment.status === 'sick'
+                                ? 'bg-slate-800 dark:bg-slate-700 text-white shadow-md ring-2 ring-slate-400'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                            }`}
+                          >
+                            <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            <span>Libur</span>
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-semibold text-slate-500 mb-1">
-                          Catatan Shift / Proyek:
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="cth: Shift Pagi / Project X"
-                          value={assignment.notes || ''}
-                          onChange={(e) => {
-                            onUpdateScheduleDay(selectedDate, {
-                              ...selectedDayData,
-                              assignments: {
-                                ...selectedDayData.assignments,
-                                [comp.id]: {
-                                  ...assignment,
-                                  notes: e.target.value,
+
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                            Jam Lembur:
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="16"
+                            value={assignment.overtimeHours || 0}
+                            onChange={(e) => {
+                              const ot = Number(e.target.value) || 0;
+                              onUpdateScheduleDay(selectedDate, {
+                                ...selectedDayData,
+                                assignments: {
+                                  ...selectedDayData.assignments,
+                                  [comp.id]: {
+                                    ...assignment,
+                                    overtimeHours: ot,
+                                  },
                                 },
-                              },
-                            });
-                          }}
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                        />
+                              });
+                            }}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 mb-1">
+                            Catatan:
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Shift/catatan"
+                            value={assignment.notes || ''}
+                            onChange={(e) => {
+                              onUpdateScheduleDay(selectedDate, {
+                                ...selectedDayData,
+                                assignments: {
+                                  ...selectedDayData.assignments,
+                                  [comp.id]: {
+                                    ...assignment,
+                                    notes: e.target.value,
+                                  },
+                                },
+                              });
+                            }}
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            {/* Pinned Footer */}
+            <div className="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/90 flex justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => setSelectedDate(null)}
                 className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer"
               >
-                Selesai & Tutup
+                Selesai & Simpan
               </button>
             </div>
           </div>

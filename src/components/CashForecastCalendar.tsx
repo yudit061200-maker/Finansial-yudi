@@ -967,14 +967,23 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
 
       {/* 5. Interactive Day Detail Modal */}
       {detailModalOpen && selectedDayData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-6 bg-slate-950/70 backdrop-blur-xs flex min-h-full items-center justify-center animate-in fade-in duration-200"
+          onClick={() => setDetailModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 w-full max-w-4xl my-auto rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header (Pinned shrink-0) */}
+            <div className="flex items-start justify-between p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
                     {selectedDayData.isPast ? 'Tanggal Lampau' : selectedDayData.isToday ? 'Hari Ini' : 'Terjadwal'}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    Mode Landscape
                   </span>
                   <span className="text-xs text-slate-400 font-mono">
                     {selectedDayData.dateStr}
@@ -993,229 +1002,261 @@ export const CashForecastCalendar: React.FC<CashForecastCalendarProps> = ({
               </button>
             </div>
 
-            {/* End of Day Cash KPI (Pure Real Calculation) */}
-            <div className="p-4.5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white border border-slate-800 flex items-center justify-between shadow-md">
-              <div>
-                <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider block">
-                  Saldo Sisa Kas Akhir Hari
-                </span>
-                <div className="text-2xl font-black font-mono tracking-tight mt-1 text-white tabular-nums">
-                  {formatMoney(selectedDayData.endOfDayCashBalance)}
+            {/* Scrollable Body (modal-scroll) */}
+            <div className="p-5 sm:p-6 overflow-y-auto overscroll-contain flex-1 modal-scroll">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                {/* Left Column (5 cols): Cash KPI Card & Summary */}
+                <div className="md:col-span-5 space-y-4">
+                  {/* End of Day Cash KPI (Pure Real Calculation) */}
+                  <div className="p-4.5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white border border-slate-800 flex items-center justify-between shadow-md">
+                    <div>
+                      <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-wider block">
+                        Saldo Sisa Kas Akhir Hari
+                      </span>
+                      <div className="text-2xl font-black font-mono tracking-tight mt-1 text-white tabular-nums">
+                        {formatMoney(selectedDayData.endOfDayCashBalance)}
+                      </div>
+                      <span className="text-xs text-slate-300 mt-1 block">
+                        {selectedDayData.isPast
+                          ? 'Status: Posisi Riil Berdasarkan Mutasi Tercatat'
+                          : 'Status: Posisi Riil Berdasarkan Saldo Akun & Jadwal Cicilan'}
+                      </span>
+                    </div>
+                    <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-white shrink-0">
+                      <Wallet className="w-6 h-6 text-indigo-300" />
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+                    <div className="font-bold text-slate-900 dark:text-white flex items-center justify-between">
+                      <span>Pergerakan Kas Hari Ini:</span>
+                      <span className={`font-mono font-bold ${selectedDayData.actualNetFlow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        {selectedDayData.actualNetFlow >= 0 ? '+' : ''}{formatMoney(selectedDayData.actualNetFlow)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      {selectedDayData.actualTransactions.length} transaksi riil tercatat, {selectedDayData.duePayables.length} tagihan belum dibayar.
+                    </p>
+                  </div>
                 </div>
-                <span className="text-xs text-slate-300 mt-1 block">
-                  {selectedDayData.isPast
-                    ? 'Status: Posisi Riil Berdasarkan Mutasi Tercatat'
-                    : 'Status: Posisi Riil Berdasarkan Saldo Akun & Jadwal Cicilan'}
-                </span>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-white shrink-0">
-                <Wallet className="w-6 h-6 text-indigo-300" />
+
+                {/* Right Column (7 cols): Transactions & Debts */}
+                <div className="md:col-span-7 space-y-4">
+                  {/* Actual Transactions on this day */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <Receipt className="w-4 h-4 text-indigo-500" />
+                        Transaksi Aktual Terdaftar ({selectedDayData.actualTransactions.length})
+                      </span>
+                      {selectedDayData.actualTransactions.length > 0 && (
+                        <span className="text-[11px] font-mono font-bold text-slate-500">
+                          Net: {selectedDayData.actualNetFlow >= 0 ? '+' : ''}{formatMoney(selectedDayData.actualNetFlow)}
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedDayData.actualTransactions.length === 0 ? (
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-center text-xs text-slate-400">
+                        Tidak ada transaksi tercatat di tanggal ini
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto overscroll-contain modal-scroll pr-1">
+                        {selectedDayData.actualTransactions.map((tx) => {
+                          const isExpense = tx.type === 'expense';
+                          const isIncome = tx.type === 'income';
+                          return (
+                            <div
+                              key={tx.id}
+                              onClick={() => {
+                                onSelectTransaction?.(tx);
+                                setDetailModalOpen(false);
+                              }}
+                              className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div
+                                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                                    isExpense
+                                      ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400'
+                                      : isIncome
+                                      ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400'
+                                      : 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400'
+                                  }`}
+                                >
+                                  {isExpense ? (
+                                    <ArrowUpRight className="w-4 h-4" />
+                                  ) : isIncome ? (
+                                    <ArrowDownRight className="w-4 h-4" />
+                                  ) : (
+                                    <TrendingUp className="w-4 h-4" />
+                                  )}
+                                </div>
+                                <div className="truncate">
+                                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                    {tx.title}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400">
+                                    {tx.category} • {tx.paymentMethod || 'Kas'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div
+                                className={`text-xs font-black font-mono tabular-nums shrink-0 ml-2 ${
+                                  isExpense
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : isIncome
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-slate-900 dark:text-white'
+                                }`}
+                              >
+                                {isExpense ? '-' : isIncome ? '+' : ''}
+                                {formatMoney(tx.amount)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Cicilan / Tagihan yang SUDAH DIBAYAR (Lunas) */}
+                  {selectedDayData.paidPayables.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        Cicilan & Tagihan Sudah Terbayar / Lunas ({selectedDayData.paidPayables.length})
+                      </span>
+
+                      <div className="space-y-2 max-h-[160px] overflow-y-auto overscroll-contain modal-scroll pr-1">
+                        {selectedDayData.paidPayables.map((item, idx) => (
+                          <div
+                            key={`paid-item-${item.debt.id}-${idx}`}
+                            className="p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-emerald-950 dark:text-emerald-200 truncate flex items-center gap-1.5">
+                                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span>{item.title}</span>
+                                {item.personName && <span className="text-slate-400">({item.personName})</span>}
+                              </div>
+                              <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">
+                                {item.isInstallment && item.monthNumber
+                                  ? `Cicilan Bulan Ke-${item.monthNumber}/${item.tenorMonths} • Sudah Terbayar`
+                                  : 'Sudah Lunas • Tidak Mengurangi Kas Lagi'}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <div className="text-xs font-black font-mono text-emerald-700 dark:text-emerald-400">
+                                {formatMoney(item.amount)}
+                              </div>
+                              <span className="text-[9px] font-bold bg-emerald-200/60 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.2 rounded">
+                                LUNAS
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Debts & Installments BELUM DIBAYAR (Unpaid Due) */}
+                  {(selectedDayData.duePayables.length > 0 || selectedDayData.dueReceivables.length > 0) && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-rose-500" />
+                        Jatuh Tempo Belum Dibayar ({selectedDayData.duePayables.length + selectedDayData.dueReceivables.length})
+                      </span>
+
+                      <div className="space-y-2 max-h-[160px] overflow-y-auto overscroll-contain modal-scroll pr-1">
+                        {selectedDayData.duePayables.map((item, idx) => (
+                          <div
+                            key={`due-payable-${item.debt.id}-${idx}`}
+                            className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/70 dark:border-rose-800/60 flex items-center justify-between"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-rose-950 dark:text-rose-200 truncate">
+                                {item.title} {item.personName && `(${item.personName})`}
+                              </div>
+                              <div className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold">
+                                {item.isInstallment && item.monthNumber
+                                  ? `Cicilan Bulan Ke-${item.monthNumber}/${item.tenorMonths} • Belum Dibayar`
+                                  : 'Hutang Pinjaman • Jatuh Tempo'}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <div className="text-xs font-black font-mono text-rose-600 dark:text-rose-400">
+                                -{formatMoney(item.amount)}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                Sisa: {formatMoney(item.debt.remainingAmount, true)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {selectedDayData.dueReceivables.map((item, idx) => (
+                          <div
+                            key={`due-receivable-${item.debt.id}-${idx}`}
+                            className="p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/60 flex items-center justify-between"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-blue-950 dark:text-blue-200 truncate">
+                                {item.title} {item.personName && `(${item.personName})`}
+                              </div>
+                              <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">
+                                Piutang Akan Diterima
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <div className="text-xs font-black font-mono text-emerald-600 dark:text-emerald-400">
+                                +{formatMoney(item.amount)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Actual Transactions on this day */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Receipt className="w-4 h-4 text-indigo-500" />
-                  Transaksi Aktual Terdaftar ({selectedDayData.actualTransactions.length})
-                </span>
-                {selectedDayData.actualTransactions.length > 0 && (
-                  <span className="text-[11px] font-mono font-bold text-slate-500">
-                    Net: {selectedDayData.actualNetFlow >= 0 ? '+' : ''}{formatMoney(selectedDayData.actualNetFlow)}
-                  </span>
+            {/* Action Buttons in Modal (Pinned shrink-0) */}
+            <div className="flex items-center justify-between gap-2 p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/90 shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {onOpenNewTransaction && (
+                  <button
+                    onClick={() => {
+                      setDetailModalOpen(false);
+                      onOpenNewTransaction(selectedDayData.dateStr);
+                    }}
+                    className="py-2 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Catat Transaksi</span>
+                  </button>
+                )}
+                {onNavigateToDebts && (selectedDayData.duePayables.length > 0 || selectedDayData.paidPayables.length > 0) && (
+                  <button
+                    onClick={() => {
+                      setDetailModalOpen(false);
+                      onNavigateToDebts();
+                    }}
+                    className="py-2 px-3.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Buku Hutang</span>
+                  </button>
                 )}
               </div>
 
-              {selectedDayData.actualTransactions.length === 0 ? (
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-center text-xs text-slate-400">
-                  Tidak ada transaksi tercatat di tanggal ini
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {selectedDayData.actualTransactions.map((tx) => {
-                    const isExpense = tx.type === 'expense';
-                    const isIncome = tx.type === 'income';
-                    return (
-                      <div
-                        key={tx.id}
-                        onClick={() => {
-                          onSelectTransaction?.(tx);
-                          setDetailModalOpen(false);
-                        }}
-                        className="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-all cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div
-                            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                              isExpense
-                                ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400'
-                                : isIncome
-                                ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400'
-                            }`}
-                          >
-                            {isExpense ? (
-                              <ArrowUpRight className="w-4 h-4" />
-                            ) : isIncome ? (
-                              <ArrowDownRight className="w-4 h-4" />
-                            ) : (
-                              <TrendingUp className="w-4 h-4" />
-                            )}
-                          </div>
-                          <div className="truncate">
-                            <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                              {tx.title}
-                            </div>
-                            <div className="text-[10px] text-slate-400">
-                              {tx.category} • {tx.paymentMethod || 'Kas'}
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          className={`text-xs font-black font-mono tabular-nums shrink-0 ml-2 ${
-                            isExpense
-                              ? 'text-rose-600 dark:text-rose-400'
-                              : isIncome
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-slate-900 dark:text-white'
-                          }`}
-                        >
-                          {isExpense ? '-' : isIncome ? '+' : ''}
-                          {formatMoney(tx.amount)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Cicilan / Tagihan yang SUDAH DIBAYAR (Lunas) */}
-            {selectedDayData.paidPayables.length > 0 && (
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  Cicilan & Tagihan Sudah Terbayar / Lunas ({selectedDayData.paidPayables.length})
-                </span>
-
-                <div className="space-y-2">
-                  {selectedDayData.paidPayables.map((item, idx) => (
-                    <div
-                      key={`paid-item-${item.debt.id}-${idx}`}
-                      className="p-3 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-emerald-950 dark:text-emerald-200 truncate flex items-center gap-1.5">
-                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <span>{item.title}</span>
-                          {item.personName && <span className="text-slate-400">({item.personName})</span>}
-                        </div>
-                        <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold mt-0.5">
-                          {item.isInstallment && item.monthNumber
-                            ? `Cicilan Bulan Ke-${item.monthNumber}/${item.tenorMonths} • Sudah Terbayar`
-                            : 'Sudah Lunas • Tidak Mengurangi Kas Lagi'}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 ml-2">
-                        <div className="text-xs font-black font-mono text-emerald-700 dark:text-emerald-400">
-                          {formatMoney(item.amount)}
-                        </div>
-                        <span className="text-[9px] font-bold bg-emerald-200/60 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.2 rounded">
-                          LUNAS
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Debts & Installments BELUM DIBAYAR (Unpaid Due) */}
-            {(selectedDayData.duePayables.length > 0 || selectedDayData.dueReceivables.length > 0) && (
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <CreditCard className="w-4 h-4 text-rose-500" />
-                  Jatuh Tempo Belum Dibayar ({selectedDayData.duePayables.length + selectedDayData.dueReceivables.length})
-                </span>
-
-                <div className="space-y-2">
-                  {selectedDayData.duePayables.map((item, idx) => (
-                    <div
-                      key={`due-payable-${item.debt.id}-${idx}`}
-                      className="p-3 rounded-xl bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/70 dark:border-rose-800/60 flex items-center justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-rose-950 dark:text-rose-200 truncate">
-                          {item.title} {item.personName && `(${item.personName})`}
-                        </div>
-                        <div className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold">
-                          {item.isInstallment && item.monthNumber
-                            ? `Cicilan Bulan Ke-${item.monthNumber}/${item.tenorMonths} • Belum Dibayar`
-                            : 'Hutang Pinjaman • Jatuh Tempo'}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 ml-2">
-                        <div className="text-xs font-black font-mono text-rose-600 dark:text-rose-400">
-                          -{formatMoney(item.amount)}
-                        </div>
-                        <div className="text-[10px] text-slate-400">
-                          Sisa: {formatMoney(item.debt.remainingAmount, true)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {selectedDayData.dueReceivables.map((item, idx) => (
-                    <div
-                      key={`due-receivable-${item.debt.id}-${idx}`}
-                      className="p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/60 flex items-center justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-blue-950 dark:text-blue-200 truncate">
-                          {item.title} {item.personName && `(${item.personName})`}
-                        </div>
-                        <div className="text-[10px] text-blue-700 dark:text-blue-400 font-semibold">
-                          Piutang Akan Diterima
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0 ml-2">
-                        <div className="text-xs font-black font-mono text-emerald-600 dark:text-emerald-400">
-                          +{formatMoney(item.amount)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons in Modal */}
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-              {onOpenNewTransaction && (
-                <button
-                  onClick={() => {
-                    setDetailModalOpen(false);
-                    onOpenNewTransaction(selectedDayData.dateStr);
-                  }}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ Catat Transaksi Tanggal Ini</span>
-                </button>
-              )}
-              {onNavigateToDebts && (selectedDayData.duePayables.length > 0 || selectedDayData.paidPayables.length > 0) && (
-                <button
-                  onClick={() => {
-                    setDetailModalOpen(false);
-                    onNavigateToDebts();
-                  }}
-                  className="py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1"
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Buka Buku Hutang</span>
-                </button>
-              )}
+              <button
+                onClick={() => setDetailModalOpen(false)}
+                className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>

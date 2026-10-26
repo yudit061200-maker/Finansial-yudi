@@ -223,352 +223,371 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-slate-900/70 backdrop-blur-xs p-3 sm:p-4 md:p-6 flex min-h-full items-center justify-center">
+      <div className="fixed inset-0 -z-10" onClick={onClose} aria-hidden="true" />
+      <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full my-auto shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden">
+        {/* Pinned Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/70 dark:bg-slate-900/60">
+          <div className="flex items-center gap-3">
             <div
-              className="w-9 h-9 rounded-2xl flex items-center justify-center text-white text-xs font-bold shadow-xs"
+              className="w-10 h-10 rounded-2xl flex items-center justify-center text-white text-xs font-bold shadow-xs shrink-0"
               style={{ backgroundColor: color }}
             >
               {name ? name.slice(0, 2).toUpperCase() : 'AK'}
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">
-                {editAccount ? 'Kelola & Edit Akun Rekening' : 'Tambah Akun Rekening Baru'}
-              </h3>
-              <p className="text-[11px] text-slate-500 font-medium">
-                {editAccount ? 'Ubah saldo, reset ke Rp 0, atau perbarui data akun' : 'Tambahkan rekening bank, e-wallet, atau dompet tunai'}
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {editAccount ? 'Kelola & Edit Akun Rekening' : 'Tambah Akun Rekening Baru'}
+                </h3>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Mode Landscape
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                {editAccount ? 'Ubah saldo, reset ke Rp 0, atau perbarui data akun rekening' : 'Tambahkan rekening bank, e-wallet, atau dompet tunai'}
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 cursor-pointer p-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Provider / Template Quick Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Pilihan Bank / Dompet / Platform
-            </label>
-            <select
-              value={provider}
-              onChange={(e) => handleProviderChange(e.target.value as BankProvider)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white cursor-pointer"
-            >
-              {PROVIDER_PRESETS.map((p) => (
-                <option key={p.provider} value={p.provider}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Account Name */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Nama Akun / Rekening
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Contoh: BCA Tahapan Utama, GoPay Harian, Dompet Tunai"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white"
-              required
-            />
-          </div>
-
-          {/* Account Type Tabs */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Jenis Akun
-            </label>
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200/80 text-center">
-              {[
-                { id: 'bank', label: 'Bank' },
-                { id: 'ewallet', label: 'E-Wallet' },
-                { id: 'cash', label: 'Tunai' },
-                { id: 'investment', label: 'Investasi' },
-                { id: 'credit_card', label: 'Kredit' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setType(t.id as AccountType)}
-                  className={`py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                    type === t.id
-                      ? 'bg-white text-indigo-600 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Balance (Saldo) Management Section */}
-          <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800">
-                {editAccount ? 'Saldo Terkini Akun (IDR)' : 'Saldo Awal (IDR)'}
-              </label>
-              <button
-                type="button"
-                onClick={() => setBalance('0')}
-                className="text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-lg border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer"
-                title="Set Saldo menjadi 0"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Reset ke Rp 0</span>
-              </button>
-            </div>
-
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
-                Rp
-              </span>
-              <input
-                type="number"
-                value={balance}
-                onChange={(e) => setBalance(e.target.value)}
-                placeholder="0"
-                className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-base font-black text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
-
-            {/* Quick Balance Presets & Zero Out Chips */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <button
-                type="button"
-                onClick={() => handleQuickBalanceSet(0)}
-                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                  parseFloat(balance) === 0
-                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                    : 'bg-white text-slate-700 border-slate-200 hover:bg-rose-50 hover:text-rose-600'
-                }`}
-              >
-                Rp 0 (Kosong)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickBalanceAdd(100000)}
-                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
-              >
-                +100rb
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickBalanceAdd(500000)}
-                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
-              >
-                +500rb
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickBalanceAdd(1000000)}
-                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
-              >
-                +1 Juta
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickBalanceAdd(5000000)}
-                className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
-              >
-                +5 Juta
-              </button>
-            </div>
-          </div>
-
-          {/* Number & Holder */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Nomor Rekening / HP (Opsional)
-              </label>
-              <input
-                type="text"
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-                placeholder="Contoh: 5271948821"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Atas Nama / Pemilik (Opsional)
-              </label>
-              <input
-                type="text"
-                value={accountHolder}
-                onChange={(e) => setAccountHolder(e.target.value)}
-                placeholder="Contoh: Yuditira"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white"
-              />
-            </div>
-          </div>
-
-          {/* Color Picker Swatches */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Warna Aksen Akun
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              {COLOR_PRESETS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={`w-7 h-7 rounded-xl transition-all cursor-pointer ${
-                    color === c
-                      ? 'ring-2 ring-indigo-600 ring-offset-2 scale-110'
-                      : 'hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="w-7 h-7 rounded-xl border border-slate-200 cursor-pointer overflow-hidden p-0 bg-transparent"
-                title="Pilih warna kustom"
-              />
-            </div>
-          </div>
-
-          {/* Icon Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Ikon Akun
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              {ICONS.map((item) => {
-                const IconComponent = item.icon;
-                const isSelected = icon === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setIcon(item.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <IconComponent className="w-3.5 h-3.5" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Danger / Account Management Zone when Editing */}
-          {editAccount && (
-            <div className="border-t border-slate-200 pt-3.5 space-y-2.5">
-              <div className="text-xs font-bold text-slate-700">Opsi Pengelolaan & Hapus</div>
-
-              {!showDeleteConfirm ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  {onResetBalance && (
-                    <button
-                      type="button"
-                      onClick={handleDirectResetBalance}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Kosongkan Saldo (Rp 0)</span>
-                    </button>
-                  )}
-
-                  {onClearTransactions && (
-                    <button
-                      type="button"
-                      onClick={() => setIsClearTxModalOpen(true)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Bersihkan Transaksi Akun</span>
-                    </button>
-                  )}
-
-                  {onDelete && (
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Hapus Akun Ini</span>
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl space-y-3 animate-in fade-in">
-                  <div className="flex items-start gap-2 text-rose-900 text-xs">
-                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-bold">Konfirmasi Hapus Akun "{editAccount.name}"</div>
-                      <div className="text-rose-700 text-[11px] mt-0.5">
-                        Saldo saat ini ({formatRupiah(editAccount.balance)}) dan akun akan dihapus dari sistem.
-                      </div>
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 text-xs text-rose-800 font-medium cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={deleteTransactionsAlso}
-                      onChange={(e) => setDeleteTransactionsAlso(e.target.checked)}
-                      className="rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
-                    />
-                    <span>Hapus juga seluruh riwayat transaksi akun ini</span>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="overflow-y-auto overscroll-contain flex-1 px-6 py-4 space-y-5 modal-scroll">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Left Column: Core Account Details & Balance */}
+              <div className="space-y-4">
+                {/* Provider / Template Quick Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Pilihan Bank / Dompet / Platform
                   </label>
+                  <select
+                    value={provider}
+                    onChange={(e) => handleProviderChange(e.target.value as BankProvider)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 cursor-pointer"
+                  >
+                    {PROVIDER_PRESETS.map((p) => (
+                      <option key={p.provider} value={p.provider}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-1">
+                {/* Account Name */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Nama Akun / Rekening <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Contoh: BCA Tahapan Utama, GoPay Harian, Dompet Tunai"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    required
+                  />
+                </div>
+
+                {/* Account Type Tabs */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Jenis Akun
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700 text-center">
+                    {[
+                      { id: 'bank', label: 'Bank' },
+                      { id: 'ewallet', label: 'E-Wallet' },
+                      { id: 'cash', label: 'Tunai' },
+                      { id: 'investment', label: 'Investasi' },
+                      { id: 'credit_card', label: 'Kredit' },
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setType(t.id as AccountType)}
+                        className={`py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                          type === t.id
+                            ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Balance (Saldo) Management Section */}
+                <div className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700 rounded-2xl p-3.5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {editAccount ? 'Saldo Terkini Akun (IDR)' : 'Saldo Awal (IDR)'}
+                    </label>
                     <button
                       type="button"
-                      onClick={() => setShowDeleteConfirm(false)}
-                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => setBalance('0')}
+                      className="text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 px-2 py-0.5 rounded-lg border border-rose-200 dark:border-rose-900 flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Set Saldo menjadi 0"
                     >
-                      Batal
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset ke Rp 0</span>
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">
+                      Rp
+                    </span>
+                    <input
+                      type="number"
+                      value={balance}
+                      onChange={(e) => setBalance(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl pl-11 pr-4 py-2.5 text-base font-black text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  {/* Quick Balance Presets & Zero Out Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickBalanceSet(0)}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                        parseFloat(balance) === 0
+                          ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-rose-50 hover:text-rose-600'
+                      }`}
+                    >
+                      Rp 0 (Kosong)
                     </button>
                     <button
                       type="button"
-                      onClick={handleDirectDelete}
-                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors flex items-center gap-1 cursor-pointer shadow-sm"
+                      onClick={() => handleQuickBalanceAdd(100000)}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Ya, Hapus Permanen</span>
+                      +100rb
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickBalanceAdd(500000)}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
+                    >
+                      +500rb
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickBalanceAdd(1000000)}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
+                    >
+                      +1 Juta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickBalanceAdd(5000000)}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer"
+                    >
+                      +5 Juta
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* Action Footer Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                {/* Number & Holder */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Nomor Rekening / HP (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                      placeholder="Contoh: 5271948821"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Atas Nama / Pemilik (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      value={accountHolder}
+                      onChange={(e) => setAccountHolder(e.target.value)}
+                      placeholder="Contoh: Yuditira"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-white font-medium focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Color Swatches, Icon Buttons, and Danger Zone */}
+              <div className="space-y-4">
+                {/* Color Picker Swatches */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Warna Aksen Akun
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {COLOR_PRESETS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setColor(c)}
+                        className={`w-7 h-7 rounded-xl transition-all cursor-pointer ${
+                          color === c
+                            ? 'ring-2 ring-indigo-600 ring-offset-2 scale-110'
+                            : 'hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      className="w-7 h-7 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer overflow-hidden p-0 bg-transparent"
+                      title="Pilih warna kustom"
+                    />
+                  </div>
+                </div>
+
+                {/* Icon Selector */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Ikon Akun
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {ICONS.map((item) => {
+                      const IconComponent = item.icon;
+                      const isSelected = icon === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setIcon(item.id)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          <IconComponent className="w-3.5 h-3.5" />
+                          <span>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Danger / Account Management Zone when Editing */}
+                {editAccount && (
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-3.5 space-y-2.5">
+                    <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Opsi Pengelolaan & Hapus
+                    </div>
+
+                    {!showDeleteConfirm ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {onResetBalance && (
+                          <button
+                            type="button"
+                            onClick={handleDirectResetBalance}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 border border-amber-200 dark:border-amber-900 transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Kosongkan Saldo (Rp 0)</span>
+                          </button>
+                        )}
+
+                        {onClearTransactions && (
+                          <button
+                            type="button"
+                            onClick={() => setIsClearTxModalOpen(true)}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Bersihkan Transaksi</span>
+                          </button>
+                        )}
+
+                        {onDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setShowDeleteConfirm(true)}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 border border-rose-200 dark:border-rose-900 transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Hapus Akun Ini</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 rounded-2xl space-y-3 animate-in fade-in">
+                        <div className="flex items-start gap-2 text-rose-900 dark:text-rose-200 text-xs">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-bold">Konfirmasi Hapus Akun "{editAccount.name}"</div>
+                            <div className="text-rose-700 dark:text-rose-400 text-[11px] mt-0.5">
+                              Saldo saat ini ({formatRupiah(editAccount.balance)}) dan akun akan dihapus dari sistem.
+                            </div>
+                          </div>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-medium cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={deleteTransactionsAlso}
+                            onChange={(e) => setDeleteTransactionsAlso(e.target.checked)}
+                            className="rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                          />
+                          <span>Hapus juga seluruh riwayat transaksi akun ini</span>
+                        </label>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDirectDelete}
+                            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors flex items-center gap-1 cursor-pointer shadow-sm"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Ya, Hapus Permanen</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Pinned Action Footer Buttons */}
+          <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 flex items-center justify-between sm:justify-end gap-3 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all cursor-pointer shadow-md shadow-indigo-100 flex items-center gap-1.5"
+              className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none flex items-center gap-1.5"
             >
               <Check className="w-4 h-4" />
               <span>{editAccount ? 'Simpan Perubahan' : 'Tambah Akun'}</span>

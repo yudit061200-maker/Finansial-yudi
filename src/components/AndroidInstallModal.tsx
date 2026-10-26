@@ -78,8 +78,14 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in select-none">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col transition-colors">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm flex min-h-full items-center justify-center animate-in fade-in select-none"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full my-auto max-h-[92vh] sm:max-h-[88vh] overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col transition-colors"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header with Android Theme */}
         <div className="p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 dark:from-indigo-900 dark:to-slate-900 text-white rounded-t-3xl relative overflow-hidden shrink-0">
           <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
@@ -95,9 +101,12 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
               <Smartphone className="w-6 h-6 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold uppercase tracking-wider bg-emerald-400/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30">
                   Android Native PWA
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/15 text-white">
+                  Mode Landscape
                 </span>
                 <span className="text-xs text-indigo-200">v1.2.0</span>
               </div>
@@ -138,7 +147,7 @@ export const AndroidInstallModal: React.FC<AndroidInstallModalProps> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-5 flex-1 overflow-y-auto">
+        <div className="p-6 space-y-5 flex-1 overflow-y-auto overscroll-contain modal-scroll">
           {activeGuideTab === 'pwa' ? (
             <>
               {/* Status Banner */}
